@@ -1,0 +1,12 @@
+[package]
+name = "mpc_allocator_rust"
+version = "0.1.0"
+authors = ["Sebastien Valat <sebastien.valat@gmail.com>"]
+panic = "abort"
+
+[lib]
+name = "hpc_allocator_rust"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+libc = {version = "0.2", default-features = false}
