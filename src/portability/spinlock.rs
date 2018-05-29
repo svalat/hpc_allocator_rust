@@ -7,6 +7,7 @@
 *****************************************************/
 
 ///Import pthread_spinlock from C libray on posix systems
+///Need to look if at some point it will appear in crate libc...
 
 //import
 extern crate libc;
@@ -29,7 +30,7 @@ extern {
 //built object to hide the lowlevel funcs
 pub struct SpinLock<T> {
 	lock: pthread_spin_lock_t,
-	data: * mut T,
+	data: T,
 }
 
 pub struct SpinLockGuard<'a, T:'a>
@@ -40,10 +41,10 @@ pub struct SpinLockGuard<'a, T:'a>
 
 impl <T> SpinLock<T> {
 	///Construct the spinlock and embed the content in it
-	pub fn new(obj: &mut T) -> Self {
+	pub fn new(obj: T) -> Self {
 		let mut ret = Self {
 			lock: 0,
-			data: obj as * mut T, 
+			data: obj, 
 		};
 
 		let ptr = &ret.lock as * const pthread_spin_lock_t;
@@ -63,13 +64,13 @@ impl <T> SpinLock<T> {
         SpinLockGuard
         {
             lock: &self.lock,
-            data: unsafe{&mut *(self.data)},
+            data: unsafe{&mut *(&self.data as * const T as * mut T)},
         }
     }
 
 	///no lock
 	pub fn nolock_safe_read<'a>(&'a self) -> &'a T {
-		unsafe{&*self.data}
+		unsafe{&mut *(&self.data as * const T as * mut T)}
 	}
 }
 
