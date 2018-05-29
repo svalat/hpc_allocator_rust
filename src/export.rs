@@ -11,13 +11,14 @@
 
 // Pull in the system libc library for what crt0.o likely requires
 extern crate libc;
+use portability::osmem;
 
 // Entry point for this program
 #[no_mangle]
 pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 	let ret;
 	unsafe {
-		ret = libc::mmap(0 as *mut libc::c_void, size*4096,libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANON | libc::MAP_PRIVATE, 0,0);
+		ret = osmem::mmap(0,size*4096) as *mut libc::c_void;
 		panic!("Hello");
 	}
 	ret

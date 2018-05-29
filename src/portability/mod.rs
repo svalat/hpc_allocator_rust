@@ -9,4 +9,4 @@
 ///This module define all the OS wrappers to ease portability
 
 //import
-pub mod mem;
+pub mod osmem;

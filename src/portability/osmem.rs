@@ -16,7 +16,7 @@ use common::types::{Addr,Size};
 use common::consts::*;
 
 ///wrapper to mmap function
-pub fn anon_mmap(addr:Addr,size:Size) -> Addr
+pub fn mmap(addr:Addr,size:Size) -> Addr
 {
 	//check
 	debug_assert!(addr % SMALL_PAGE_SIZE == 0);
@@ -82,18 +82,18 @@ pub fn mremap(addr:Addr,old_size:Size,new_size:Size,_dest_addr:Addr) -> Addr {
 mod tests
 {
 	use common::consts::*;
-	use portability::mem;
+	use portability::osmem;
 
 	#[test]
 	fn test_mmap_mremap_munap() {
-		let ptr = mem::anon_mmap(0,2*4096);
+		let ptr = osmem::mmap(0,2*4096);
 		assert!(ptr != 0);
 		assert!(ptr % SMALL_PAGE_SIZE == 0);
 
-		let ptr = mem::mremap(ptr,2*4096,4*4096,0);
+		let ptr = osmem::mremap(ptr,2*4096,4*4096,0);
 		assert!(ptr != 0);
 		assert!(ptr % SMALL_PAGE_SIZE == 0);
 
-		mem::munmap(ptr,4*4096);
+		osmem::munmap(ptr,4*4096);
 	}
 }
