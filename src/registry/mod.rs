@@ -13,3 +13,4 @@
 //export
 pub mod segment;
 pub mod region;
+pub mod registry;

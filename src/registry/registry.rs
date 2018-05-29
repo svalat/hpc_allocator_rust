@@ -6,8 +6,14 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module define all the OS wrappers to ease portability
+///This implement the region registry to keep track of all the allocated segments
+///and map their related chunk manager.
 
 //import
-pub mod osmem;
-pub mod spinlock;
+use common::consts::*;
+use registry::region::*;
+
+///Define the global registry
+pub struct RegionRegistry {
+	regions: [* mut Region; MAX_REGIONS],
+}
