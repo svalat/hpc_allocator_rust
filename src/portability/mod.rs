@@ -6,11 +6,7 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module define all the basics to build the allocator
+///This module define all the OS wrappers to ease portability
 
 //import
-pub mod types;
-pub mod consts;
-pub mod ops;
-pub mod traits;
-pub mod region_registry;
+pub mod mem;
