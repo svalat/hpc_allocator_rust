@@ -6,19 +6,12 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This file implement the region regitry which provide a gobal
-///way to register allocators managing the different region segments
-///which are larger than 2 MB.
+///Implement the segment description.
 
 use common::types::{Size,Addr};
 use common::traits::{ChunkManager};
 use common::consts::*;
 use core::mem;
-
-//some consts
-const REGION_SPLITTING: Size = MACRO_BLOC_SIZE;
-const REGION_SIZE: Size = 1024*1024*1024*1024;
-const REGION_ENTRIES: Size = REGION_SIZE / REGION_SPLITTING;
 
 ///A region is a segment of the memory of a size at least 
 ///MACRO_BLOC_SIZE, it is used to be handled by the 
@@ -81,7 +74,7 @@ impl RegionSegment {
 	pub fn set_manager(self:&mut Self,manager: *mut ChunkManager) {
 		//check
 		self.sanity_check();
-		debug_assert!(self.manager.is_null());
+		debug_assert!(self.manager.is_null() || manager.is_null() || self.manager == manager);
 
 		//setup
 		self.manager = manager;
@@ -131,7 +124,7 @@ impl RegionSegment {
 		}
 	}
 
-	pub fn get_manager_mut(self: &Self) -> Option<&mut ChunkManager> {
+	pub fn get_manager_mut(self: & Self) -> Option<&mut ChunkManager> {
 		//check
 		self.sanity_check();
 
@@ -158,11 +151,19 @@ struct Region
 #[cfg(test)]
 mod tests
 {
-	use common::region_registry::*;
+	use common::consts::*;
+	use registry::segments::*;
 	use core::mem;
+	use core::ptr;
+	use portability::osmem;
+
+	struct MockChunkManager;
+	impl ChunkManager for MockChunkManager {
+
+	}
 
 	#[test]
-	fn region_segment_struct_size() {
+	fn struct_size() {
 		assert_eq!(mem::size_of::<RegionSegment>(), 32);
 	}
 
@@ -174,5 +175,103 @@ mod tests
 	#[test]
 	fn region_entries() {
 		assert_eq!(REGION_ENTRIES,524288);
+	}
+
+	#[test]
+	fn new() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_segment() {
+		let ptr = osmem::mmap(0,4*4096);
+		let reg = RegionSegment::get_segment(ptr);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn set_manager() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let mut reg = RegionSegment::new(ptr,4*4096,pmanager);
+		reg.set_manager(pmanager);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_content_addr() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let mut reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let addr = reg.get_content_addr();
+		assert_eq!(addr,ptr+32);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn contain() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		assert_eq!(reg.contain(ptr),true);
+		assert_eq!(reg.contain(ptr+4*4096-1),true);
+		assert_eq!(reg.contain(ptr+4*4096),false);
+		assert_eq!(reg.contain(ptr-1),false);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_total_size() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		assert_eq!(reg.get_total_size(),4*4096);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_inner_size() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		assert_eq!(reg.get_inner_size(),4*4096-32);
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_manager() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		reg.get_manager().unwrap();
+		osmem::munmap(ptr,4*4096);
+	}
+
+	#[test]
+	fn get_manager_mut() {
+		let ptr = osmem::mmap(0,4*4096);
+		//TODO replace by MOCK
+		let mut manager = MockChunkManager{};
+		let pmanager = &mut manager as *mut ChunkManager;
+		let mut reg = RegionSegment::new(ptr,4*4096,pmanager);
+		reg.get_manager_mut().unwrap();
+		osmem::munmap(ptr,4*4096);
 	}
 }

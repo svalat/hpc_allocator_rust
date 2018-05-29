@@ -10,7 +10,7 @@
 ///In rust this represent mostly the Trait.
 
 use common::types::{Size};
-use common::region_registry::{RegionSegment};
+use registry::segments::{RegionSegment};
 
 pub trait ChunkManager {
 

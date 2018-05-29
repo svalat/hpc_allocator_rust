@@ -6,10 +6,9 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module define all the basics to build the allocator
+///This file implement the region regitry which provide a gobal
+///way to register allocators managing the different region segments
+///which are larger than 2 MB.
 
-//import
-pub mod types;
-pub mod consts;
-pub mod ops;
-pub mod traits;
+//export
+pub mod segments;

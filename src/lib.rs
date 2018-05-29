@@ -12,6 +12,7 @@
 
 //load modules
 mod common;
+mod registry;
 mod portability;
 
 #[cfg(not(test))]
