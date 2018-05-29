@@ -66,6 +66,11 @@ impl <T> SpinLock<T> {
             data: unsafe{&mut *(self.data)},
         }
     }
+
+	///no lock
+	pub fn nolock_safe_read<'a>(&'a self) -> &'a T {
+		unsafe{&*self.data}
+	}
 }
 
 impl<'a, T> Deref for SpinLockGuard<'a, T>
