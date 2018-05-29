@@ -14,4 +14,4 @@ pub type Addr = usize;
 ///Definition of a size
 pub type Size = usize;
 ///Definition of signed size
-pub type USize = isize;
+pub type SSize = isize;
