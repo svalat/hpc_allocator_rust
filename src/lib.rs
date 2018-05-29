@@ -9,11 +9,13 @@
 //we want to avoid to take special language things inside the allocator
 #![feature(lang_items, start,core)]
 #![no_std]
+#![allow(dead_code)]
 
 //load modules
 mod common;
 mod registry;
 mod portability;
+mod chunk;
 
 #[cfg(not(test))]
 pub mod export;

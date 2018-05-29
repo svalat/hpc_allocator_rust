@@ -6,10 +6,6 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This file implement the region regitry which provide a gobal
-///way to register allocators managing the different region segments
-///which are larger than 2 MB.
+///Implement all the chunk managers
 
-//export
-pub mod segment;
-pub mod region;
+pub mod dummy;
