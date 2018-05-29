@@ -42,7 +42,7 @@ pub struct SpinLockGuard<'a, T:'a>
 impl <T> SpinLock<T> {
 	///Construct the spinlock and embed the content in it
 	pub fn new(obj: T) -> Self {
-		let mut ret = Self {
+		let ret = Self {
 			lock: 0,
 			data: obj, 
 		};
@@ -92,4 +92,38 @@ impl<'a, T> Drop for SpinLockGuard<'a, T>
         let ptr = self.lock as * const pthread_spin_lock_t;
         unsafe{pthread_spin_unlock(ptr)};
     }
+}
+
+#[cfg(test)]
+mod tests
+{
+	extern crate std;
+
+	use portability::spinlock::*;
+
+	#[test]
+	fn serial() {
+		let spin = SpinLock::new(0);
+		*spin.lock() += 1;
+		*spin.lock() += 1;
+		*spin.lock() += 1;
+		assert_eq!(*spin.lock(), 3);
+	}
+
+	#[test]
+	fn threads() {
+		/*let spin = SpinLock::new(0);
+		let mut handlers: std::Vec<JoinHandle<i32>>;
+		
+		for i in 0..128 {
+			handlers[i] = std::thread::spawn( || {
+				*spin.lock() += 1;
+				0
+			});
+		}
+
+		for i in 0..128 {
+			handlers[i].join();
+		}*/
+	}
 }

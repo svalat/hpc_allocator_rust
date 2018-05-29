@@ -7,7 +7,7 @@
 *****************************************************/
 
 //we want to avoid to take special language things inside the allocator
-#![feature(lang_items, start,core)]
+#![feature(lang_items, start,core,libc)]
 #![no_std]
 #![allow(dead_code)]
 
