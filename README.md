@@ -1,5 +1,7 @@
 # HPC Allocator Rust
 
+It a small project to try to push rust in his limit and better understant the low level aspects of the language.
+
 This is a reimplemenation of the C version of MPC\_Allocator embeded into the MPC framework (http://mpc.hpcframework.paratools.com/).
 This memory allocator provides :
 
