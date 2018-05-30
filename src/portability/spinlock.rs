@@ -16,7 +16,7 @@ extern crate libc;
 use core::ops::{Drop, Deref, DerefMut};
 
 //low level spincloks (pthread_spinlock_t) are int (from /usr/include/bits/pthreadtypes.h)
-type PthreadSpinLock = libc::c_int;
+type PthreadSpinLock = libc::c_ulong;
 const PTHREAD_PROCESS_PRIVATE: libc::c_int = 0;
 
 //declare extern funcs
@@ -114,5 +114,29 @@ mod tests
 		*spin.lock() += 1;
 		*spin.lock() += 1;
 		assert_eq!(*spin.lock(), 3);
+	}
+
+	#[test]
+	fn parallel() {
+		let spin = std::sync::Arc::new(SpinLock::new(0));
+		let mut handlers = std::vec::Vec::new();
+		let threads = 32;
+
+		for _ in 0..threads {
+			let spin = spin.clone();
+			let handler = std::thread::spawn(move|| {
+				let mut spin = spin.lock();
+				*spin += 1;
+				*spin += 1;
+			});
+			handlers.push(handler);
+		}
+
+		for handler in handlers {
+			let _ = handler.join();
+		}
+
+		let res = spin.lock();
+		assert_eq!(*res,2*threads);
 	}
 }
