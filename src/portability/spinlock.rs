@@ -73,7 +73,7 @@ impl <T> SpinLock<T> {
 	///Special case, consider read unlock for some struct of the allocator which
 	///are built and use with this constrain (eg. the region registry).
 	pub fn nolock_safe_read<'a>(&'a self) -> &'a T {
-		unsafe{&mut *(&self.data as * const T as * mut T)}
+		unsafe{& *(&self.data as * const T)}
 	}
 }
 

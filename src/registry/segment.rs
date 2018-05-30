@@ -45,13 +45,13 @@ impl RegionSegment {
 		let regptr = ptr as * mut RegionSegment;
 
 		//fill
-		let mut region = unsafe{ *regptr };
+		let region = unsafe{ &mut *regptr };
 		region.base = ptr;
 		region.size = total_size;
 		region.manager = manager;
 
 		//return
-		region
+		*region
 	}
 
 	///Return a segment from address.
@@ -70,7 +70,7 @@ impl RegionSegment {
 
 	///Make some sanity check of content to help debugging and quickly find issues.
 	#[inline]
-	fn sanity_check(self: &Self) {
+	pub fn sanity_check(self: &Self) {
 		//check
 		debug_assert!(self.base != 0);
 		debug_assert!(self.base % SMALL_PAGE_SIZE == 0);
@@ -87,6 +87,7 @@ impl RegionSegment {
 
 	#[inline]
 	pub fn get_ptr(&self) -> * const RegionSegment {
+		self.sanity_check();
 		self.base as * const RegionSegment
 	}
 
