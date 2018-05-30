@@ -30,6 +30,8 @@ pub struct RegionSegment
 	manager: * mut ChunkManager,
 }
 
+pub type RegionSegmentPtr = * const RegionSegment;
+
 //Implementation
 impl RegionSegment {
 	///Construct a region segment
@@ -86,9 +88,9 @@ impl RegionSegment {
 	}
 
 	#[inline]
-	pub fn get_ptr(&self) -> * const RegionSegment {
+	pub fn get_ptr(&self) -> RegionSegmentPtr {
 		self.sanity_check();
-		self.base as * const RegionSegment
+		self.base as RegionSegmentPtr
 	}
 
 	///Update manager

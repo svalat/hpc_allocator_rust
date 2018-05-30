@@ -104,7 +104,7 @@ impl RegionRegistry {
 
 	//TODO see if we can avoid duplication with set_one_segment_entry by playing with some
 	//mut ref
-	fn unset_on_segment_entry(&mut self, ptr:Addr) {
+	fn unset_on_segment_entry(&mut self, ptr:Addr, entry: RegionSegmentPtr) {
 		if ptr > PHYS_MAX_ADDR {
 			//TODO use warning
 			//allocWarning("Invalid address range in request for region registry : %p !",ptr);
@@ -120,7 +120,9 @@ impl RegionRegistry {
 
 		//get the local region
 		let region = self.get_region_or_create(ptr);
-		region.unset(id);
+		if region.get(id) == entry {
+			region.unset(id);
+		}
 	}
 
 	pub fn has_entry(&self, ptr: Addr) -> bool {
@@ -209,7 +211,7 @@ impl RegionRegistry {
 		//loop
 		let mut offset = 0;
 		while offset < size {
-			self.unset_on_segment_entry(ptr + offset);
+			self.unset_on_segment_entry(ptr + offset, segment.get_ptr());
 			offset += REGION_SPLITTING;
 		}
 	}
@@ -287,12 +289,13 @@ impl RegionRegistry {
 	fn unmap_all_memory(&mut self) {
 		let mut regions = self.regions.lock();
 		
-		for i in 0..
-		MAX_REGIONS {
-			let mut region = unsafe{&mut *(regions[i]  as * mut Region)};
-			region.unmap_registered_memory();
-			osmem::munmap(regions[i] as Addr,mem::size_of::<Region>());
-			regions[i] = ptr::null();
+		for i in 0..MAX_REGIONS {
+			if !regions[i].is_null() {
+				let mut region = unsafe{&mut *(regions[i]  as * mut Region)};
+				region.unmap_registered_memory();
+				osmem::munmap(regions[i] as Addr,mem::size_of::<Region>());
+				regions[i] = ptr::null();
+			}
 		}
 	}
 }
@@ -340,6 +343,9 @@ mod tests
 		//unregister
 		registry.remove_from_segment(seg);
 		osmem::munmap(ptr,size);
+
+		//clear mem
+		registry.unmap_all_memory();
 	}
 
 	#[test]
@@ -385,6 +391,9 @@ mod tests
 		registry.remove_from_segment(seg1);
 		registry.remove_from_segment(seg2);
 		osmem::munmap(ptr,size);
+
+		//clear mem
+		registry.unmap_all_memory();
 	}
 
 	#[test]
@@ -413,15 +422,16 @@ mod tests
 		assert!(ret.is_none());
 
 		//first
-		for i in 0..size/2 {
-			let ret = registry.get_segment(ptr+i);
+		let step = 1;
+		for i in 0..size/2/step {
+			let ret = registry.get_segment(ptr+i*step);
 			assert!(!ret.is_none());
 			assert_eq!(ret.unwrap().get_root_addr(), ptr );
 		}
 
 		//second
-		for i in 0..size/2 {
-			let ret = registry.get_segment(ptr+size/2+i);
+		for i in 0..size/2/step {
+			let ret = registry.get_segment(ptr+size/2+i*step);
 			assert!(!ret.is_none());
 			assert_eq!(ret.unwrap().get_root_addr(), ptr+size/2 );
 		}
@@ -430,5 +440,8 @@ mod tests
 		registry.remove_from_segment(seg1);
 		registry.remove_from_segment(seg2);
 		osmem::munmap(ptr,size);
+
+		//clear mem
+		registry.unmap_all_memory();
 	}
 }

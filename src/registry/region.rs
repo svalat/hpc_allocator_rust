@@ -14,13 +14,10 @@ extern crate libc;
 
 //import
 use common::consts::*;
-use registry::segment::RegionSegment;
+use registry::segment::{RegionSegmentPtr};
 use common::types::{Addr,Size};
 use core::ptr;
 use portability::osmem;
-
-///Define a region entry which is now just a pointer to a segment
-pub type RegionPtr = * const RegionSegment;
 
 ///Define a region which is mainly an array of entries and some basic operation.
 pub struct Region
@@ -28,7 +25,7 @@ pub struct Region
 	//void clear(void);
 	//bool isEmpty(void) const;
 	//void unmapRegisteredMemory(void);
-	entries: [RegionPtr; REGION_ENTRIES],
+	entries: [RegionSegmentPtr; REGION_ENTRIES],
 }
 
 //implement
@@ -75,7 +72,7 @@ impl Region {
 
 	///unmap all the registred regions (more for unit tests)
 	pub fn unmap_registered_memory(self: &mut Self) {
-		let mut last: RegionPtr = ptr::null();
+		let mut last: RegionSegmentPtr = ptr::null();
 
 		//loop on all segments to free them
 		for i in 0..REGION_ENTRIES {
@@ -93,7 +90,7 @@ impl Region {
 	///**id** id of the entry to setup.
 	///**entry** value to setup.
 	#[inline]
-	pub fn set(self: &mut Self,id:Size,entry:RegionPtr) {
+	pub fn set(self: &mut Self,id:Size,entry:RegionSegmentPtr) {
 		debug_assert!(id < REGION_ENTRIES);
 		self.entries[id] = entry;
 	}
@@ -109,7 +106,7 @@ impl Region {
 
 	///return the requested entry in the region.
 	#[inline]
-	pub fn get(self: &Self,id:Size) -> RegionPtr {
+	pub fn get(self: &Self,id:Size) -> RegionSegmentPtr {
 		debug_assert!(id < REGION_ENTRIES);
 		self.entries[id]
 	}
@@ -128,7 +125,7 @@ mod tests
 
 	#[test]
 	fn region_entry_size() {
-		assert_eq!(mem::size_of::<RegionPtr>(), 8);
+		assert_eq!(mem::size_of::<RegionSegmentPtr>(), 8);
 	}
 
 	#[test]
@@ -162,7 +159,7 @@ mod tests
 		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
 		
 		assert_eq!(region.is_empty(),true);
-		region.set(10,&seg as RegionPtr);
+		region.set(10,&seg as RegionSegmentPtr);
 		assert_eq!(region.is_empty(),false);
 		
 		osmem::munmap(ptr,1024*4096);
@@ -180,8 +177,8 @@ mod tests
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
-		region.set(10,&seg as RegionPtr);
-		region.set(11,&seg as RegionPtr);
+		region.set(10,&seg as RegionSegmentPtr);
+		region.set(11,&seg as RegionSegmentPtr);
 
 		region.unmap_registered_memory();
 
