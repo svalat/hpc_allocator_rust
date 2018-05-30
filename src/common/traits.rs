@@ -20,9 +20,9 @@ pub trait Allocator {
 
 }
 
-pub trait MemoryMSource {
-	fn map(inner_size: Size, zero_filled: bool, manager: & mut ChunkManager) -> (RegionSegment, bool);
-	fn remap(old_segment: *mut RegionSegment,new_inner_size: Size, manager: & mut ChunkManager) -> RegionSegment;
-	fn unmap(segment: & mut RegionSegment);
+pub trait MemorySource {
+	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: & mut ChunkManager) -> (RegionSegment, bool);
+	fn remap(&mut self,old_segment: *mut RegionSegment,new_inner_size: Size, manager: & mut ChunkManager) -> RegionSegment;
+	fn unmap(&mut self,segment: & mut RegionSegment);
 	//virtual bool haveEfficientRemap(void) const = 0;
 }
