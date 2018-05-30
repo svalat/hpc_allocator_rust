@@ -20,7 +20,7 @@ use core::ptr;
 use portability::osmem;
 
 ///Define a region entry which is now just a pointer to a segment
-pub type RegionEntry = * const RegionSegment;
+pub type RegionPtr = * const RegionSegment;
 
 ///Define a region which is mainly an array of entries and some basic operation.
 pub struct Region
@@ -28,7 +28,7 @@ pub struct Region
 	//void clear(void);
 	//bool isEmpty(void) const;
 	//void unmapRegisteredMemory(void);
-	entries: [RegionEntry; REGION_ENTRIES],
+	entries: [RegionPtr; REGION_ENTRIES],
 }
 
 //implement
@@ -75,7 +75,7 @@ impl Region {
 
 	///unmap all the registred regions (more for unit tests)
 	pub fn unmap_registered_memory(self: &mut Self) {
-		let mut last: RegionEntry = ptr::null();
+		let mut last: RegionPtr = ptr::null();
 
 		//loop on all segments to free them
 		for i in 0..REGION_ENTRIES {
@@ -93,7 +93,7 @@ impl Region {
 	///**id** id of the entry to setup.
 	///**entry** value to setup.
 	#[inline]
-	pub fn set(self: &mut Self,id:Size,entry:RegionEntry) {
+	pub fn set(self: &mut Self,id:Size,entry:RegionPtr) {
 		debug_assert!(id < REGION_ENTRIES);
 		self.entries[id] = entry;
 	}
@@ -109,7 +109,7 @@ impl Region {
 
 	///return the requested entry in the region.
 	#[inline]
-	pub fn get(self: &Self,id:Size) -> RegionEntry {
+	pub fn get(self: &Self,id:Size) -> RegionPtr {
 		debug_assert!(id < REGION_ENTRIES);
 		self.entries[id]
 	}
@@ -128,12 +128,17 @@ mod tests
 
 	#[test]
 	fn region_entry_size() {
-		assert_eq!(mem::size_of::<RegionEntry>(), 8);
+		assert_eq!(mem::size_of::<RegionPtr>(), 8);
 	}
 
 	#[test]
 	fn region_entries() {
 		assert_eq!(REGION_ENTRIES,524288);
+	}
+
+	#[test]
+	fn region_size_full_page() {
+		assert!(mem::size_of::<Region>() % SMALL_PAGE_SIZE == 0);
 	}
 
 	#[test]
@@ -157,7 +162,7 @@ mod tests
 		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
 		
 		assert_eq!(region.is_empty(),true);
-		region.set(10,&seg as RegionEntry);
+		region.set(10,&seg as RegionPtr);
 		assert_eq!(region.is_empty(),false);
 		
 		osmem::munmap(ptr,1024*4096);
@@ -175,8 +180,8 @@ mod tests
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
-		region.set(10,&seg as RegionEntry);
-		region.set(11,&seg as RegionEntry);
+		region.set(10,&seg as RegionPtr);
+		region.set(11,&seg as RegionPtr);
 
 		region.unmap_registered_memory();
 
