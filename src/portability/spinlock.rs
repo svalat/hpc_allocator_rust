@@ -16,29 +16,31 @@ extern crate libc;
 use core::ops::{Drop, Deref, DerefMut};
 
 //low level spincloks (pthread_spinlock_t) are int (from /usr/include/bits/pthreadtypes.h)
-type pthread_spin_lock_t = libc::c_int;
+type PthreadSpinLock = libc::c_int;
 const PTHREAD_PROCESS_PRIVATE: libc::c_int = 0;
 
 //declare extern funcs
 extern {
-	fn pthread_spin_init(lock: * const pthread_spin_lock_t, pshared:libc::c_int) -> libc::c_int;
-	fn pthread_spin_lock(lock: * const pthread_spin_lock_t) -> libc::c_int;
-	fn pthread_spin_unlock(lock: * const pthread_spin_lock_t) -> libc::c_int;
-	fn pthread_spin_destroy(lock: * const pthread_spin_lock_t) -> libc::c_int;
+	fn pthread_spin_init(lock: * const PthreadSpinLock, pshared:libc::c_int) -> libc::c_int;
+	fn pthread_spin_lock(lock: * const PthreadSpinLock) -> libc::c_int;
+	fn pthread_spin_unlock(lock: * const PthreadSpinLock) -> libc::c_int;
+	fn pthread_spin_destroy(lock: * const PthreadSpinLock) -> libc::c_int;
 }
 
-//built object to hide the lowlevel funcs
+///built object to hide the lowlevel funcs
 pub struct SpinLock<T> {
-	lock: pthread_spin_lock_t,
+	lock: PthreadSpinLock,
 	data: T,
 }
 
+///Implement guard mechanism
 pub struct SpinLockGuard<'a, T:'a>
 {
-    lock: &'a pthread_spin_lock_t,
+    lock: &'a PthreadSpinLock,
     data: &'a mut T,
 }
 
+///Implement spinlock
 impl <T> SpinLock<T> {
 	///Construct the spinlock and embed the content in it
 	pub fn new(obj: T) -> Self {
@@ -47,7 +49,7 @@ impl <T> SpinLock<T> {
 			data: obj, 
 		};
 
-		let ptr = &ret.lock as * const pthread_spin_lock_t;
+		let ptr = &ret.lock as * const PthreadSpinLock;
 		let status = unsafe{pthread_spin_init(ptr,PTHREAD_PROCESS_PRIVATE)};
 		if status != 0 {
 			panic!("Fail to init pthread spinlock !");
@@ -59,7 +61,7 @@ impl <T> SpinLock<T> {
 	///lock
  	pub fn lock(&self) -> SpinLockGuard<T>
     {
-		let ptr = &self.lock as * const pthread_spin_lock_t;
+		let ptr = &self.lock as * const PthreadSpinLock;
         unsafe{pthread_spin_lock(ptr)};
         SpinLockGuard
         {
@@ -68,28 +70,32 @@ impl <T> SpinLock<T> {
         }
     }
 
-	///no lock
+	///Special case, consider read unlock for some struct of the allocator which
+	///are built and use with this constrain (eg. the region registry).
 	pub fn nolock_safe_read<'a>(&'a self) -> &'a T {
 		unsafe{&mut *(&self.data as * const T as * mut T)}
 	}
 }
 
+///Implement deref for spin lock guard
 impl<'a, T> Deref for SpinLockGuard<'a, T>
 {
     type Target = T;
     fn deref<'b>(&'b self) -> &'b T { &*self.data }
 }
 
+///Implement deref mutable for spin lock guard
 impl<'a, T> DerefMut for SpinLockGuard<'a, T>
 {
     fn deref_mut<'b>(&'b mut self) -> &'b mut T { &mut *self.data }
 }
 
+///Implement drop for spin lock guard
 impl<'a, T> Drop for SpinLockGuard<'a, T>
 {
     fn drop(&mut self)
     {
-        let ptr = self.lock as * const pthread_spin_lock_t;
+        let ptr = self.lock as * const PthreadSpinLock;
         unsafe{pthread_spin_unlock(ptr)};
     }
 }
@@ -108,22 +114,5 @@ mod tests
 		*spin.lock() += 1;
 		*spin.lock() += 1;
 		assert_eq!(*spin.lock(), 3);
-	}
-
-	#[test]
-	fn threads() {
-		/*let spin = SpinLock::new(0);
-		let mut handlers: std::Vec<JoinHandle<i32>>;
-		
-		for i in 0..128 {
-			handlers[i] = std::thread::spawn( || {
-				*spin.lock() += 1;
-				0
-			});
-		}
-
-		for i in 0..128 {
-			handlers[i].join();
-		}*/
 	}
 }

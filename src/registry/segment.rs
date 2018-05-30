@@ -78,6 +78,18 @@ impl RegionSegment {
 		debug_assert!(self.size % SMALL_PAGE_SIZE == 0);
 	}
 
+	///check
+	#[inline]
+	pub fn full_sanitify_check(&self) {
+		self.sanity_check();
+		debug_assert!(!self.manager.is_null());
+	}
+
+	#[inline]
+	pub fn get_ptr(&self) -> * const RegionSegment {
+		self.base as * const RegionSegment
+	}
+
 	///Update manager
 	pub fn set_manager(self:&mut Self,manager: *mut ChunkManager) {
 		//check
