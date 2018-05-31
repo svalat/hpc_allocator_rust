@@ -17,10 +17,9 @@ use portability::osmem;
 use registry::registry::*;
 use registry::segment::*;
 use core::mem;
-use core::ptr;
 
 struct DummyMMSource {
-	registry: * mut RegionRegistry,
+	registry: Option<* mut RegionRegistry>,
 }
 
 impl DummyMMSource {
@@ -28,13 +27,18 @@ impl DummyMMSource {
 		let ptr;
 		
 		match registry {
-			Some(x) => ptr = x as * mut RegionRegistry,
-			None => ptr = ptr::null::<RegionRegistry>() as * mut RegionRegistry,
+			Some(x) => ptr = Some(x as * mut RegionRegistry),
+			None => ptr = None,
 		}
 
 		DummyMMSource {
 			registry: ptr
 		}
+	}
+
+	#[inline]
+	fn get_registry(&mut self) -> &mut RegionRegistry {
+		unsafe{&mut *self.registry.unwrap()}
 	}
 }
 
@@ -62,12 +66,14 @@ impl MemorySource for DummyMMSource {
 
 		//register
 		let res;
-		let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
-		if !self.registry.is_null() && !pmanager.is_null() {
-			let registry = unsafe{&mut *self.registry};
+		let has_manager = !manager.is_none();
+		if !self.registry.is_none() && has_manager {
+			let registry = unsafe{&mut *self.registry.unwrap()};
+			let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
 			res = registry.set_entry(ptr,total_size,pmanager);
 		} else {
-			res = RegionSegment::new(ptr,total_size,pmanager);
+			let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
+			res = RegionSegment::new(ptr,total_size,Some(pmanager));
 		}
 
 		//ret		
@@ -87,8 +93,8 @@ impl MemorySource for DummyMMSource {
 		total_size = up_to_power_of_2(total_size,SMALL_PAGE_SIZE);
 
 		//unregister
-		let registry = unsafe{&mut *self.registry};
-		if !self.registry.is_null() && !old_segment.get_manager().is_none() {
+		if self.registry.is_some() && old_segment.has_manager() {
+			let registry = unsafe{&mut *self.registry.unwrap()};
 			registry.remove_from_segment(old_segment);
 		}
 
@@ -97,12 +103,12 @@ impl MemorySource for DummyMMSource {
 
 		//register
 		let res;
-		let has_manager = manager.is_none();
+		let has_manager = manager.is_some();
 		let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
-		if !self.registry.is_null() && !has_manager {
-			res = registry.set_entry(ptr,total_size,pmanager);
+		if self.registry.is_some() && has_manager {
+			res = self.get_registry().set_entry(ptr,total_size,pmanager);
 		} else {
-			res = RegionSegment::new(ptr,total_size,pmanager);
+			res = RegionSegment::new(ptr,total_size,Some(pmanager));
 		}
 
 		res
@@ -114,9 +120,8 @@ impl MemorySource for DummyMMSource {
 		segment.sanity_check();
 			
 		//unregister
-		if !self.registry.is_null() && !segment.get_manager().is_none() {
-			let registry = unsafe{&mut *self.registry};
-			registry.remove_from_segment(segment);
+		if self.registry.is_some() && segment.has_manager() {
+			self.get_registry().remove_from_segment(segment);
 		}
 		
 		//unmap it

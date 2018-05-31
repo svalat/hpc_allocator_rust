@@ -156,7 +156,7 @@ mod tests
 		let pmanager = &mut manager as *mut ChunkManager;
 
 		let ptr2 = osmem::mmap(0,1024*4096);
-		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
+		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));
 		
 		assert_eq!(region.is_empty(),true);
 		region.set(10,&seg as RegionSegmentPtr);
@@ -176,7 +176,7 @@ mod tests
 		let pmanager = &mut manager as *mut ChunkManager;
 
 		let ptr2 = osmem::mmap(0,1024*4096);
-		let seg = RegionSegment::new(ptr2,1024*4096,pmanager);
+		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));
 		region.set(10,&seg as RegionSegmentPtr);
 		region.set(11,&seg as RegionSegmentPtr);
 

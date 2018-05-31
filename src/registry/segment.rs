@@ -27,7 +27,7 @@ pub struct RegionSegment
 	///Keep track of the size of the segement
 	size: Size,
 	///pointer to the chunk manager to handle its content
-	manager: * mut ChunkManager,
+	manager: Option<* mut ChunkManager>,
 }
 
 pub type RegionSegmentPtr = * const RegionSegment;
@@ -39,7 +39,7 @@ impl RegionSegment {
 	/// **ptr**: Base address of the segment, should ideally be aligned on page size.
 	/// **total_size**: Total size of the segment. Header will be added on start so inner content size will be lower.
 	/// **manager**: Pointer to the chunk manager to manage chunks inside the segment.
-	pub fn new(ptr: Addr,total_size: Size, manager: *mut ChunkManager) -> RegionSegment {
+	pub fn new(ptr: Addr,total_size: Size, manager: Option<*mut ChunkManager>) -> RegionSegment {
 		//check
 		debug_assert!(ptr % SMALL_PAGE_SIZE == 0);
 
@@ -84,7 +84,7 @@ impl RegionSegment {
 	#[inline]
 	pub fn full_sanitify_check(&self) {
 		self.sanity_check();
-		debug_assert!(!self.manager.is_null());
+		debug_assert!(!self.manager.is_none());
 	}
 
 	#[inline]
@@ -94,10 +94,10 @@ impl RegionSegment {
 	}
 
 	///Update manager
-	pub fn set_manager(self:&mut Self,manager: *mut ChunkManager) {
+	pub fn set_manager(self:&mut Self,manager: Option<*mut ChunkManager>) {
 		//check
 		self.sanity_check();
-		debug_assert!(self.manager.is_null() || manager.is_null() || self.manager == manager);
+		debug_assert!(self.manager.is_none() || manager.is_none() || self.manager == manager);
 
 		//setup
 		self.manager = manager;
@@ -158,10 +158,9 @@ impl RegionSegment {
 		self.sanity_check();
 
 		//switch
-		if self.manager.is_null() {
-			None
-		} else {
-			Some(unsafe{&*self.manager})
+		match self.manager {
+			Some(x) => Some(unsafe{&*x}),
+			None => None,
 		}
 	}
 
@@ -172,10 +171,16 @@ impl RegionSegment {
 		self.sanity_check();
 
 		//switch
-		if self.manager.is_null() {
-			None
-		} else {
-			Some(unsafe{&mut *self.manager})
+		match self.manager {
+			Some(x) => Some(unsafe{&mut *x}),
+			None => None
+		}
+	}
+
+	pub fn has_manager(self) -> bool {
+		match self.manager {
+			Some(_) => true,
+			None => false,
 		}
 	}
 }
@@ -199,7 +204,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let _reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let _reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		osmem::munmap(ptr,4*4096);
 	}
 
@@ -216,8 +221,8 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let mut reg = RegionSegment::new(ptr,4*4096,pmanager);
-		reg.set_manager(pmanager);
+		let mut reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
+		reg.set_manager(Some(pmanager));
 		osmem::munmap(ptr,4*4096);
 	}
 
@@ -227,7 +232,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		let addr = reg.get_content_addr();
 		assert_eq!(addr,ptr+32);
 		osmem::munmap(ptr,4*4096);
@@ -239,7 +244,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.contain(ptr),true);
 		assert_eq!(reg.contain(ptr+4*4096-1),true);
 		assert_eq!(reg.contain(ptr+4*4096),false);
@@ -253,7 +258,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.get_total_size(),4*4096);
 		osmem::munmap(ptr,4*4096);
 	}
@@ -264,7 +269,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.get_inner_size(),4*4096-32);
 		osmem::munmap(ptr,4*4096);
 	}
@@ -275,7 +280,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		reg.get_manager().unwrap();
 		osmem::munmap(ptr,4*4096);
 	}
@@ -286,7 +291,7 @@ mod tests
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
 		let pmanager = &mut manager as *mut ChunkManager;
-		let reg = RegionSegment::new(ptr,4*4096,pmanager);
+		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		reg.get_manager_mut().unwrap();
 		osmem::munmap(ptr,4*4096);
 	}

@@ -42,7 +42,7 @@ impl RegionRegistry {
 		debug_assert!(total_size >= REGION_SPLITTING);
 		debug_assert!(!manager.is_null());
 
-		let res = RegionSegment::new(ptr,total_size,manager);
+		let res = RegionSegment::new(ptr,total_size,Some(manager));
 		self.set_segment_entry(res);
 		
 		res
@@ -316,7 +316,7 @@ mod tests
 		//setup segment
 		let size = 3*1024*1024;
 		let ptr = osmem::mmap(0,size);
-		let seg = RegionSegment::new(ptr,size,pmanager);
+		let seg = RegionSegment::new(ptr,size,Some(pmanager));
 
 		//regitry
 		let mut registry = RegionRegistry::new();
@@ -357,8 +357,8 @@ mod tests
 		//setup segment 1
 		let size = 5*1024*1024;
 		let ptr = osmem::mmap(0,size);
-		let seg1 = RegionSegment::new(ptr,size/2,pmanager);
-		let seg2 = RegionSegment::new(ptr+size/2,size/2,pmanager);
+		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager));
+		let seg2 = RegionSegment::new(ptr+size/2,size/2,Some(pmanager));
 
 		//registry
 		let mut registry = RegionRegistry::new();
@@ -405,8 +405,8 @@ mod tests
 		//setup segment 1
 		let size = 5*1024*1024;
 		let ptr = osmem::mmap(0,size);
-		let seg1 = RegionSegment::new(ptr,size/2,pmanager);
-		let seg2 = RegionSegment::new(ptr+size/2,size/2,pmanager);
+		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager));
+		let seg2 = RegionSegment::new(ptr+size/2,size/2,Some(pmanager));
 
 		//registry
 		let mut registry = RegionRegistry::new();
