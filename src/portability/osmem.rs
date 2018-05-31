@@ -60,14 +60,22 @@ pub fn munmap(addr:Addr,size:Size) -> bool {
 	ret != 0
 }
 
-pub fn mremap(addr:Addr,old_size:Size,new_size:Size,_dest_addr:Addr) -> Addr {
+pub fn mremap(addr:Addr,old_size:Size,new_size:Size,dest_addr:Addr) -> Addr {
 	//check
 	debug_assert!(addr % SMALL_PAGE_SIZE == 0);
 	debug_assert!(old_size % SMALL_PAGE_SIZE == 0);
 	debug_assert!(new_size % SMALL_PAGE_SIZE == 0);
 
 	//call
-	let ret = unsafe{libc::mremap(addr as *mut libc::c_void,old_size,new_size,libc::MREMAP_MAYMOVE)};
+	let ret;
+	if dest_addr == 0 {
+		ret = unsafe{libc::mremap(addr as *mut libc::c_void,old_size,new_size,libc::MREMAP_MAYMOVE)};
+	} else {
+		ret = unsafe{libc::mremap(addr as *mut libc::c_void,old_size,new_size,libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED,dest_addr)};
+		if ret != libc::MAP_FAILED {
+			assert_eq!(ret as Addr,dest_addr);
+		}
+	}
 
 	//check
 	if ret == libc::MAP_FAILED {
