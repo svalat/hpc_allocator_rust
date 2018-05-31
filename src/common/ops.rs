@@ -37,6 +37,11 @@ pub fn ptr_from_option_ref<T>(value:Option<&mut T>) -> * mut T {
 	}
 }
 
+#[inline]
+pub fn ref_from_option_ptr<'a,T>(value:Option<* mut T>) -> &'a mut T {
+	unsafe{&mut *value.unwrap()}
+}
+
 #[cfg(test)]
 mod tests
 {

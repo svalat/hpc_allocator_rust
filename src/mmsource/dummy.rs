@@ -38,7 +38,7 @@ impl DummyMMSource {
 
 	#[inline]
 	fn get_registry(&mut self) -> &mut RegionRegistry {
-		unsafe{&mut *self.registry.unwrap()}
+		ref_from_option_ptr(self.registry)
 	}
 }
 
