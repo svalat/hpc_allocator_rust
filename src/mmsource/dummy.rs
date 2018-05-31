@@ -17,21 +17,29 @@ use portability::osmem;
 use registry::registry::*;
 use registry::segment::*;
 use core::mem;
+use core::ptr;
 
 struct DummyMMSource {
 	registry: * mut RegionRegistry,
 }
 
 impl DummyMMSource {
-	pub fn new(registry: * mut RegionRegistry) -> DummyMMSource {
+	pub fn new(registry: Option<& mut RegionRegistry>) -> DummyMMSource {
+		let ptr;
+		
+		match registry {
+			Some(x) => ptr = x as * mut RegionRegistry,
+			None => ptr = ptr::null::<RegionRegistry>() as * mut RegionRegistry,
+		}
+
 		DummyMMSource {
-			registry: registry
+			registry: ptr
 		}
 	}
 }
 
 impl MemorySource for DummyMMSource {
-	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: & mut ChunkManager) -> (RegionSegment, bool)
+	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<& mut ChunkManager>) -> (RegionSegment, bool)
 	{
 		//errors
 		debug_assert!(inner_size > 0);
@@ -54,7 +62,7 @@ impl MemorySource for DummyMMSource {
 
 		//register
 		let res;
-		let pmanager = manager as *const ChunkManager as *mut ChunkManager;
+		let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
 		if !self.registry.is_null() && !pmanager.is_null() {
 			let registry = unsafe{&mut *self.registry};
 			res = registry.set_entry(ptr,total_size,pmanager);
@@ -66,7 +74,7 @@ impl MemorySource for DummyMMSource {
 		(res,true)
 	}
 
-	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: & mut ChunkManager) -> RegionSegment
+	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<& mut ChunkManager>) -> RegionSegment
 	{
 		//errors
 		old_segment.sanity_check();
@@ -89,8 +97,9 @@ impl MemorySource for DummyMMSource {
 
 		//register
 		let res;
-		let pmanager = manager as *const ChunkManager as *mut ChunkManager;
-		if !self.registry.is_null() && !pmanager.is_null() {
+		let has_manager = manager.is_none();
+		let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
+		if !self.registry.is_null() && !has_manager {
 			res = registry.set_entry(ptr,total_size,pmanager);
 		} else {
 			res = RegionSegment::new(ptr,total_size,pmanager);
@@ -125,10 +134,10 @@ mod tests
 	fn test_full_workflow() {
 		let mut registry = RegionRegistry::new();
 		let mut manager = DummyChunkManager::new();
-		let mut mmsource = DummyMMSource::new(&mut registry as * mut RegionRegistry);
+		let mut mmsource = DummyMMSource::new(Some(&mut registry));
 
 		//map
-		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,&mut manager);
+		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(&mut manager));
 		assert!(seg1.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed,true);
 
@@ -137,7 +146,7 @@ mod tests
 		assert_eq!(seg1_check.unwrap().get_root_addr(),seg1.get_root_addr());
 
 		//remap
-		let seg1_remap = mmsource.remap(seg1,4*1024*1024,&mut manager);
+		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(&mut manager));
 
 		//check registry
 		let seg1_check = registry.get_segment(seg1.get_root_addr());

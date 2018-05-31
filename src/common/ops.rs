@@ -29,10 +29,31 @@ pub fn up_to_power_of_2(size:Size,align:Size) -> Size {
 	ret
 }
 
+#[inline]
+pub fn ptr_from_option_ref<T>(value:Option<&mut T>) -> * mut T {
+	match value {
+		Some(x) => x as * mut T,
+		None => 0 as * mut T,
+	}
+}
+
 #[cfg(test)]
 mod tests
 {
 	use common::ops;
+
+	#[test]
+	fn ptr_from_option_ref() {
+		let mut a = 1;
+		
+		let ptr1 = ops::ptr_from_option_ref(Some(&mut a));
+		let ptr2 = ops::ptr_from_option_ref(Some(&mut a));
+		let ptr3 = ops::ptr_from_option_ref::<i32>(None);
+
+		assert!(!ptr1.is_null());
+		assert!(!ptr2.is_null());
+		assert!(ptr3.is_null());
+	}
 
 	#[test]
 	fn ceil_to_power_of_2() {
