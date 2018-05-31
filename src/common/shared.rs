@@ -10,17 +10,18 @@
 ///As inside the allocator we manage our memory ourself we do not manager automatic free
 ///inside the container
 ///**CAUTION** This is unsafe, you need to protect content by spinlock or ensure adequate usage.
+///**TODO** Hum, rust have core::ptr::Shared but not enabled by default, keep an eye on it.
 
 //import
 use core::marker::{Sync,Send};
 use core::ptr;
 
 #[derive(Copy)]
-struct SharedPtrBox<T> {
+pub struct SharedPtrBox<T> {
 	data: * const T,
 }
 
-impl <T>  SharedPtrBox<T> {
+impl <T> SharedPtrBox<T> {
 	pub fn new_null() -> Self {
 		Self {
 			data: ptr::null(),
@@ -79,6 +80,14 @@ impl <T>  SharedPtrBox<T> {
 
 	pub fn is_null(&self) -> bool {
 		self.data.is_null()
+	}
+
+	pub fn get_ptr(&self) -> * const T {
+		if self.data.is_null() {
+			panic!("Try to access NULL address !");
+		} else {
+			self.data
+		}
 	}
 }
 
