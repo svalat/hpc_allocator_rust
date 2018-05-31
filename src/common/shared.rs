@@ -13,6 +13,7 @@
 
 //import
 use core::marker::{Sync,Send};
+use core::ptr;
 
 #[derive(Copy)]
 struct SharedPtrBox<T> {
@@ -20,7 +21,31 @@ struct SharedPtrBox<T> {
 }
 
 impl <T>  SharedPtrBox<T> {
-	pub fn new(data: * const T) -> Self {
+	pub fn new_null() -> Self {
+		Self {
+			data: ptr::null(),
+		}
+	}
+
+	pub fn new_ref(data: & T) -> Self {
+		Self {
+			data: data as * const T,
+		}
+	}
+
+	pub fn new_ref_mut(data: &mut T) -> Self {
+		Self {
+			data: data as * const T,
+		}
+	}
+
+	pub fn new_ptr(data: * const T) -> Self {
+		Self {
+			data: data,
+		}
+	}
+	
+	pub fn new_ptr_mut(data: * mut T) -> Self {
 		Self {
 			data: data,
 		}
@@ -75,12 +100,20 @@ mod tests
 
 	use common::shared::*;
 	use portability::spinlock::*;
-	use core::ptr;
 
 	#[test]
-	fn basic_1() {
-		let mut a = 10;
-		let copy1 = SharedPtrBox::new(&mut a as *mut i32);
+	fn basic_1_ref() {
+		let a = 10;
+		let copy1 = SharedPtrBox::new_ref(&a);
+		let mut copy2 = copy1;
+		*copy2.get_mut() = 11;
+		assert_eq!(a, 11);
+	}
+
+	#[test]
+	fn basic_1_ptr() {
+		let a = 10;
+		let copy1 = SharedPtrBox::new_ptr(& a as *const i32);
 		let mut copy2 = copy1;
 		*copy2.get_mut() = 11;
 		assert_eq!(a, 11);
@@ -88,8 +121,8 @@ mod tests
 
 	#[test]
 	fn basic_2() {
-		let mut a = 10;
-		let copy1 = SharedPtrBox::new(&mut a as *mut i32);
+		let a = 10;
+		let copy1 = SharedPtrBox::new_ref(&a);
 		let mut copy2 = copy1;
 		*copy2.get_safe_mut().unwrap() = 11;
 		assert_eq!(a, 11);
@@ -98,7 +131,7 @@ mod tests
 	#[test]
 	fn threads() {
 		let mut a = SpinLock::new(0);
-		let spin = SharedPtrBox::new(&mut a as *mut SpinLock<i32>);
+		let spin = SharedPtrBox::new_ref_mut(&mut a);
 
 		let mut handlers = std::vec::Vec::new();
 		let threads = 32;
@@ -123,10 +156,10 @@ mod tests
 
 	#[test]
 	fn is_null() {
-		let a: SharedPtrBox<i32> = SharedPtrBox::new(ptr::null());
+		let a: SharedPtrBox<i32> = SharedPtrBox::new_null();
 		assert_eq!(a.is_null(),true);
 		let tmp = 10;
-		let b = SharedPtrBox::new(&tmp as * const i32);
+		let b = SharedPtrBox::new_ref(&tmp);
 		assert_eq!(b.is_null(),false);
 	}
  }
