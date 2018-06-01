@@ -53,9 +53,16 @@ impl <'a,T> ListIterator<'a,T>
 	where T: Listable<T>
 {
 	fn new(list:&'a List<T>) -> Self {
+		let cur;
+
+		match list.root.next.as_ref() {
+			None    => cur = SharedPtrBox::new_null(),
+			Some(x) => cur = x.clone()
+		}
+
 		Self {
 			root: &list.root,
-			cur: list.root.next.as_ref().unwrap().clone(),
+			cur: cur,
 			phantom: PhantomData,
 		}
 	}
@@ -68,6 +75,11 @@ impl <'a,T> Iterator for ListIterator<'a,T>
 	type Item = SharedPtrBox<T>;
 
 	fn next(&mut self) -> Option<SharedPtrBox<T>> {
+		//empty list
+		if self.cur.is_null() {
+			return None;
+		}
+
 		//check if end
 		let pcur = self.cur.get_ptr();
 		let proot = self.root as * const ListNode;
@@ -388,6 +400,15 @@ mod tests
 		//checl list
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,10);
+	}
+
+	#[test]
+	fn iterator_empty() {
+		let el1: List<Fake> = List::new();
+		for _ in el1.iter() {
+			//should not be called
+			assert!(false);
+		}
 	}
 
 	#[test]
