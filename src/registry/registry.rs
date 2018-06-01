@@ -12,11 +12,11 @@
 //import
 use common::consts::*;
 use common::types::*;
-use common::traits::*;
-use common::ops::*;
-use registry::segment::*;
-use registry::region::*;
-use portability::spinlock::*;
+use common::traits::ChunkManager;
+use common::ops;
+use registry::segment::{RegionSegment,RegionSegmentPtr};
+use registry::region::Region;
+use portability::spinlock::SpinLock;
 use portability::osmem;
 use core::ptr;
 use core::mem;
@@ -64,7 +64,7 @@ impl RegionRegistry {
 		//warning("Caution, using macro blocs smaller than SCTK_MACRO_BLOC_SIZE is dangerous, check usage of flag SCTK_ALLOC_CHAIN_DISABLE_REGION_REGISTER.");
 
 		//compute end
-		let end_ptr = ceil_to_power_of_2(ptr + size,REGION_SPLITTING);
+		let end_ptr = ops::ceil_to_power_of_2(ptr + size,REGION_SPLITTING);
 		let mut offset = 0;
 		while ptr + offset < end_ptr
 		{

@@ -9,7 +9,7 @@
 ///This module implement basic operations which might be used
 ///everywhere in the code.
 
-use common::types::{Size};
+use common::types::Size;
 
 #[inline]
 pub fn ceil_to_power_of_2(size:Size,align:Size) -> Size {

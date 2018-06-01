@@ -9,8 +9,8 @@
 ///This file define the allocator abstraction layout
 ///In rust this represent mostly the Trait.
 
-use common::types::{Size};
-use registry::segment::{RegionSegment};
+use common::types::Size;
+use registry::segment::RegionSegment;
 
 pub trait ChunkManager {
 

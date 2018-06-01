@@ -9,13 +9,13 @@
 ///This module implement the dummy memory source which directly forward
 ///the requests to the OS without doing any caching.
 
-use common::types::*;
-use common::traits::*;
+use common::types::Size;
+use common::traits::{MemorySource,ChunkManager};
 use common::consts::*;
-use common::ops::*;
+use common::ops;
 use portability::osmem;
-use registry::registry::*;
-use registry::segment::*;
+use registry::registry::RegionRegistry;
+use registry::segment::RegionSegment;
 use core::mem;
 
 struct DummyMMSource {
@@ -38,7 +38,7 @@ impl DummyMMSource {
 
 	#[inline]
 	fn get_registry(&mut self) -> &mut RegionRegistry {
-		ref_from_option_ptr(self.registry)
+		ops::ref_from_option_ptr(self.registry)
 	}
 }
 
@@ -59,7 +59,7 @@ impl MemorySource for DummyMMSource {
 		}
 		
 		//roudn to multiple of page size
-		let total_size = up_to_power_of_2(total_size,SMALL_PAGE_SIZE);
+		let total_size = ops::up_to_power_of_2(total_size,SMALL_PAGE_SIZE);
 		
 		//allocate
 		let ptr = osmem::mmap(0,total_size);
@@ -90,7 +90,7 @@ impl MemorySource for DummyMMSource {
 		if total_size < REGION_SPLITTING {
 			total_size = REGION_SPLITTING;
 		}
-		total_size = up_to_power_of_2(total_size,SMALL_PAGE_SIZE);
+		total_size = ops::up_to_power_of_2(total_size,SMALL_PAGE_SIZE);
 
 		//unregister
 		if self.registry.is_some() && old_segment.has_manager() {
