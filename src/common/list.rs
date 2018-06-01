@@ -56,6 +56,15 @@ impl ListNode {
 			false
 		}
 	}
+
+	pub fn extract_from_list(&mut self) {
+		//update prev
+		self.prev.as_mut().unwrap().get_mut().next = self.next.clone();
+		self.next.as_mut().unwrap().get_mut().prev = self.prev.clone();
+
+		//loop
+		self.init_as_loop();
+	}
 }
 
 pub trait Listable<T> {
@@ -150,11 +159,7 @@ impl <T> List<T>
 		let item = item.get_list_node_mut();
 
 		//update prev
-		item.prev.as_mut().unwrap().get_mut().next = item.next.clone();
-		item.prev.as_mut().unwrap().get_mut().prev = item.prev.clone();
-
-		//loop
-		item.init_as_loop();
+		item.extract_from_list();
 	}
 
 	pub fn front(&self) -> Option<&T> {
@@ -166,7 +171,7 @@ impl <T> List<T>
 		}
 	}
 
-	pub fn front_mut(&mut self) -> Option<&mut T> {
+	pub fn front_mut(&mut self) -> Option<& mut T> {
 		if self.is_empty() {
 			None
 		} else {
@@ -195,19 +200,23 @@ impl <T> List<T>
 		}
 	}
 
-	pub fn pop_front(&mut self) -> Option<&T> {
-		/*let ret = self.front_mut();
+	pub fn pop_front(&mut self) -> Option<&mut T> {
+		let ret = self.front_mut();
 		match ret {
-			Some(x) => {self.remove(x); Some(x)}
+			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(x);}
 			None => None
-		}*/
-		//TODO
-		None
+		}
+	}
+
+	pub fn pop_back(&mut self) -> Option<&mut T> {
+		let ret = self.back_mut();
+		match ret {
+			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(x);}
+			None => None
+		}
 	}
 
 	//TODO 
-	//T * popFirst(void);
-	//T * popLast(void);
 	//Iterator
 }
 
@@ -290,5 +299,25 @@ mod tests
 		el1.push_back(&mut v2);
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,11);
+	}
+
+	#[test]
+	fn pop_front() {
+		let mut el1: List<Fake> = List::new();
+
+		let mut v1 = Fake::new(10);
+		el1.push_front(&mut v1);
+
+		let mut v2 = Fake::new(11);
+		el1.push_front(&mut v2);
+
+		{
+			let e3 = el1.pop_front();
+			assert_eq!(e3.unwrap().value, 11);
+		}
+
+		//checl list
+		assert_eq!(el1.front().unwrap().value,10);
+		assert_eq!(el1.back().unwrap().value,10);
 	}
 }

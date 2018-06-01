@@ -15,6 +15,7 @@
 //import
 use core::marker::{Sync,Send};
 use core::ptr;
+use core::ops::{Deref, DerefMut};
 
 #[derive(Copy)]
 pub struct SharedPtrBox<T> {
@@ -89,6 +90,19 @@ impl <T> SharedPtrBox<T> {
 			self.data
 		}
 	}
+}
+
+///Implement deref for spin lock guard
+impl<T> Deref for SharedPtrBox<T>
+{
+    type Target = T;
+    fn deref(& self) -> & T { self.get() }
+}
+
+///Implement deref mutable for spin lock guard
+impl<T> DerefMut for SharedPtrBox<T>
+{
+    fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
 }
 
 impl <T> Clone for SharedPtrBox<T> {
@@ -170,5 +184,20 @@ mod tests
 		let tmp = 10;
 		let b = SharedPtrBox::new_ref(&tmp);
 		assert_eq!(b.is_null(),false);
+	}
+
+	#[test]
+	fn deref_const() {
+		let a = 10;
+		let copy = SharedPtrBox::new_ref(&a);
+		assert_eq!(*copy,10);
+	}
+
+	#[test]
+	fn deref_mut() {
+		let a = 10;
+		let mut copy = SharedPtrBox::new_ref(&a);
+		*copy = 11;
+		assert_eq!(*copy,11);
 	}
  }
