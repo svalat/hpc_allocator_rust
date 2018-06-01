@@ -18,7 +18,7 @@ use registry::registry::RegionRegistry;
 use registry::segment::RegionSegment;
 use core::mem;
 
-struct DummyMMSource {
+pub struct DummyMMSource {
 	registry: Option<* mut RegionRegistry>,
 }
 

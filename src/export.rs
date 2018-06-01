@@ -11,17 +11,22 @@
 
 // Pull in the system libc library for what crt0.o likely requires
 extern crate libc;
-use portability::osmem;
+
+use registry::registry::RegionRegistry;
+use mmsource::dummy::DummyMMSource;
+use chunk::dummy::DummyChunkManager;
+use common::traits::MemorySource;
 
 // Entry point for this program
 #[no_mangle]
 pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
-	let ret;
-	unsafe {
-		ret = osmem::mmap(0,size*4096) as *mut libc::c_void;
-		panic!("Hello");
-	}
-	ret
+	let mut registry = RegionRegistry::new();
+	let mut mmsource = DummyMMSource::new(Some(&mut registry));
+	let mut manager = DummyChunkManager::new();
+
+	let (seg,_zeroed) = mmsource.map(size * 4096, true, Some(&mut manager));
+	
+	seg.get_root_addr() as * mut libc::c_void
 }
 
 // These functions and traits are used by the compiler, but not
