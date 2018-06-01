@@ -111,11 +111,12 @@ impl MPSCFQueue {
             as we have one, produced work only on tail.
             We will flush tail after this, so it's ok with cache coherence if the two next
             ops are not reorder.*/
-            self.head.store(ptr::null_mut(),Ordering::SeqCst);
+            //TODO we should check if not require SeqCst or Acquire
+            self.head.store(ptr::null_mut(),Ordering::Relaxed);
             //OPA_write_barrier();
 
             //swap tail to make it NULL
-            let tail = self.tail.swap(ptr::null_mut(),Ordering::SeqCst);
+            let tail = self.tail.swap(ptr::null_mut(),Ordering::Relaxed);
 
             //we have head, so NULL tail is abnormal
             debug_assert!(!tail.is_null());
