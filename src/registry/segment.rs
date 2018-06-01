@@ -44,16 +44,16 @@ impl RegionSegment {
 		debug_assert!(ptr % SMALL_PAGE_SIZE == 0);
 
 		//cast address into struct ref
-		let regptr = ptr as * mut RegionSegment;
+		let segptr = ptr as * mut RegionSegment;
 
 		//fill
-		let region = unsafe{ &mut *regptr };
-		region.base = ptr;
-		region.size = total_size;
-		region.manager = manager;
+		let segment = unsafe{ &mut *segptr };
+		segment.base = ptr;
+		segment.size = total_size;
+		segment.manager = manager;
 
 		//return
-		*region
+		*segment
 	}
 
 	///Return a segment from address.

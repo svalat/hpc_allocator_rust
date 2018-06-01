@@ -13,11 +13,65 @@
 //import
 use common::shared::SharedPtrBox;
 use core::marker::PhantomData;
+use core::iter::Iterator;
 
 ///Basic list node header to be embedded into the object to chain as a list
 pub struct ListNode {
 	prev: Option<SharedPtrBox<ListNode>>,
 	next: Option<SharedPtrBox<ListNode>>,
+}
+
+pub trait Listable<T> {
+	fn get_list_node<'a>(&'a self) -> &'a ListNode;
+	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode;
+	fn get_from_list_node<'a>(elmt: &'a ListNode) -> &'a T;
+	fn get_from_list_node_mut<'a>(elmt: &'a mut ListNode) -> &'a mut T;
+}
+
+pub struct ListIterator<'a,T> {
+	root: &'a ListNode,
+	cur: SharedPtrBox<ListNode>,
+	phantom: PhantomData<T>,
+}
+
+pub struct List<T> 
+	where T: Listable<T>
+{
+	root: ListNode,
+	phantom: PhantomData<T>,
+}
+
+impl <'a,T> ListIterator<'a,T> 
+	where T: Listable<T>
+{
+	fn new(list:&'a List<T>) -> Self {
+		Self {
+			root: &list.root,
+			cur: list.root.next.as_ref().unwrap().clone(),
+			phantom: PhantomData,
+		}
+	}
+}
+
+
+impl <'a,T> Iterator for ListIterator<'a,T> 
+	where T: Listable<T> + 'a
+{
+	type Item = &'a T;
+
+	fn next(&mut self) -> Option<&'a T> {
+		//check if end
+		let pcur = self.cur.get_ptr();
+		let proot = self.root as * const ListNode;
+
+		if pcur == proot {
+			None
+		} else {
+			let cur = self.cur.clone();
+			self.cur = cur.get().next.as_ref().unwrap().clone();
+			Some(<T>::get_from_list_node(unsafe{&*cur.get_ptr()}))
+		}
+	}
 }
 
 impl ListNode {
@@ -65,20 +119,6 @@ impl ListNode {
 		//loop
 		self.init_as_loop();
 	}
-}
-
-pub trait Listable<T> {
-	fn get_list_node<'a>(&'a self) -> &'a ListNode;
-	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode;
-	fn get_from_list_node<'a>(elmt: &'a ListNode) -> &'a T;
-	fn get_from_list_node_mut<'a>(elmt: &'a mut ListNode) -> &'a mut T;
-}
-
-pub struct List<T> 
-	where T: Listable<T>
-{
-	root: ListNode,
-	phantom: PhantomData<T>,
 }
 
 impl <T> List<T> 
@@ -216,6 +256,9 @@ impl <T> List<T>
 		}
 	}
 
+	pub fn iter(&self)-> ListIterator<T> {
+		ListIterator::new(self)
+	}
 	//TODO 
 	//Iterator
 }
@@ -225,6 +268,7 @@ mod tests
 {
 	use common::list::*;
 	use common::types::*;
+	use portability::osmem;
 
 	struct Fake {
 		node: ListNode,
@@ -232,11 +276,18 @@ mod tests
 	}
 
 	impl Fake {
-		pub fn new(value:i32) -> Self {
+		fn new(value:i32) -> Self {
 			Self {
 				node: ListNode::new(),
 				value:value,
 			}
+		}
+
+		fn new_mem(addr:Addr, value:i32) -> &'static Fake {
+			let ptr = addr as * mut Fake;
+			let fake = unsafe{ & mut *ptr };
+			fake.value = value;
+			fake
 		}
 	}
 
@@ -320,4 +371,36 @@ mod tests
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,10);
 	}
+
+	#[test]
+	fn iterator() {
+		let mut el1: List<Fake> = List::new();
+
+		let mut v1 = Fake::new(0);
+		el1.push_back(&mut v1);
+
+		let mut v2 = Fake::new(1);
+		el1.push_back(&mut v2);
+
+		//loop
+		for (i,v) in el1.iter().enumerate() {
+			assert_eq!(v.value, i as i32);
+		}
+	}
+
+	/*#[test]
+	fn with_dynamic_alloc() {
+		let mut list: List<Fake> = List::new();
+		for i in 0..10 {
+			let ptr = osmem::mmap(0,4096);
+			let mut fake = Fake::new_mem(ptr, i);
+			list.push_back(&mut fake);
+		}
+
+		for i in 0..10 {
+			let v = list.pop_front();
+			assert_eq!(v.unwrap().value, i);
+			osmem::munmap(v.unwrap() as * const Fake as Addr, 4096);
+		}
+	}*/
 }
