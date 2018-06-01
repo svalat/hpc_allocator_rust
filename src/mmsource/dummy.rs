@@ -146,6 +146,11 @@ mod tests
 		assert!(seg1.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed,true);
 
+		//a secod to force mremap to move
+		let (seg2,zeroed2) = mmsource.map(2*1024*1024,true,Some(&mut manager));
+		assert!(seg2.get_inner_size() >= 2*1024*1024);
+		assert_eq!(zeroed2,true);
+
 		//check registry
 		let seg1_check = registry.get_segment(seg1.get_root_addr());
 		assert_eq!(seg1_check.unwrap().get_root_addr(),seg1.get_root_addr());
