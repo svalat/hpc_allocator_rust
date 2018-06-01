@@ -13,6 +13,7 @@
 ///**TODO** Hum, rust have core::ptr::Shared but not enabled by default, keep an eye on it.
 
 //import
+use common::types::Addr;
 use core::marker::{Sync,Send};
 use core::ptr;
 use core::ops::{Deref, DerefMut};
@@ -88,6 +89,14 @@ impl <T> SharedPtrBox<T> {
 			panic!("Try to access NULL address !");
 		} else {
 			self.data
+		}
+	}
+
+	pub fn get_addr(&self) -> Addr {
+		if self.data.is_null() {
+			panic!("Try to access NULL address !");
+		} else {
+			self.data as Addr
 		}
 	}
 }

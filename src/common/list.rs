@@ -24,8 +24,16 @@ pub struct ListNode {
 pub trait Listable<T> {
 	fn get_list_node<'a>(&'a self) -> &'a ListNode;
 	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode;
-	fn get_from_list_node<'a>(elmt: &'a ListNode) -> &'a T;
-	fn get_from_list_node_mut<'a>(elmt: &'a mut ListNode) -> &'a mut T;
+	fn get_from_list_node<'a>(elmt: * const ListNode) -> * const T;
+	fn get_from_list_node_mut<'a>(elmt: * mut ListNode) -> * mut T;
+
+	fn get_from_list_node_ref<'a>(elmt: * const ListNode) -> &'a T {
+		unsafe{&*Self::get_from_list_node(elmt)}
+	}
+
+	fn get_from_list_node_ref_mut<'a>(elmt: * mut ListNode) -> &'a mut T {
+		unsafe{&mut *Self::get_from_list_node_mut(elmt)}
+	}
 }
 
 pub struct ListIterator<'a,T> {
@@ -57,9 +65,9 @@ impl <'a,T> ListIterator<'a,T>
 impl <'a,T> Iterator for ListIterator<'a,T> 
 	where T: Listable<T> + 'a
 {
-	type Item = &'a T;
+	type Item = SharedPtrBox<T>;
 
-	fn next(&mut self) -> Option<&'a T> {
+	fn next(&mut self) -> Option<SharedPtrBox<T>> {
 		//check if end
 		let pcur = self.cur.get_ptr();
 		let proot = self.root as * const ListNode;
@@ -69,7 +77,7 @@ impl <'a,T> Iterator for ListIterator<'a,T>
 		} else {
 			let cur = self.cur.clone();
 			self.cur = cur.get().next.as_ref().unwrap().clone();
-			Some(<T>::get_from_list_node(unsafe{&*cur.get_ptr()}))
+			Some(SharedPtrBox::new_ptr(<T>::get_from_list_node(cur.get_ptr())))
 		}
 	}
 }
@@ -135,8 +143,13 @@ impl <T> List<T>
 		self.root.is_loop() || self.root.is_none()
 	}
 
-	pub fn push_back(&mut self, item: &mut T) {
+	pub fn push_back(&mut self, item: SharedPtrBox<T>) {
+		//check
+		assert!(!item.is_null());
+
 		//get node of new item
+		let mut item = item.clone();
+		let item = item.get_mut();
 		let mut item = item.get_list_node_mut();
 
 		//if list is empty
@@ -154,8 +167,13 @@ impl <T> List<T>
 		self.root.prev = Some(SharedPtrBox::new_ref_mut(&mut item));
 	}
 
-	pub fn push_front(&mut self, item: &mut T) {
+	pub fn push_front(&mut self, item: SharedPtrBox<T>) {
+		//check
+		assert!(!item.is_null());
+
 		//get node of new item
+		let mut item = item.clone();
+		let item = item.get_mut();
 		let mut item = item.get_list_node_mut();
 
 		//if list is empty
@@ -194,20 +212,20 @@ impl <T> List<T>
 		}
 	}
 
-	pub fn remove(&mut self, item: & mut T) {
+	/*pub fn remove(&mut self, item: & mut T) {
 		//get node of new item
 		let item = item.get_list_node_mut();
 
 		//update prev
 		item.extract_from_list();
-	}
+	}*/
 
 	pub fn front(&self) -> Option<&T> {
 		if self.is_empty() {
 			None
 		} else {
 			let node = self.root.next.as_ref().unwrap().get();
-			Some(<T>::get_from_list_node(node))
+			Some(<T>::get_from_list_node_ref(node))
 		}
 	}
 
@@ -217,7 +235,7 @@ impl <T> List<T>
 		} else {
 			let node = self.root.next.as_mut().unwrap().get_mut();
 			//Hum can be cleaner but we want to bypass mutability lifetime....
-			Some(<T>::get_from_list_node_mut(unsafe{&mut *(node as * mut ListNode)}))
+			Some(<T>::get_from_list_node_ref_mut(node as * mut ListNode))
 		}
 	}
 
@@ -226,7 +244,7 @@ impl <T> List<T>
 			None
 		} else {
 			let node = self.root.prev.as_ref().unwrap().get();
-			Some(<T>::get_from_list_node(node))
+			Some(<T>::get_from_list_node_ref(node))
 		}
 	}
 
@@ -234,24 +252,24 @@ impl <T> List<T>
 		if self.is_empty() {
 			None
 		} else {
-			let node = self.root.prev.as_mut().unwrap().get_mut();
+			let node = self.root.prev.as_mut().unwrap().get_ptr() as * mut ListNode;
 			//Hum can be cleaner but we want to bypass mutability lifetime....
-			Some(<T>::get_from_list_node_mut(unsafe{&mut *(node as * mut ListNode)}))
+			Some(<T>::get_from_list_node_ref_mut(node))
 		}
 	}
 
-	pub fn pop_front(&mut self) -> Option<&mut T> {
+	pub fn pop_front(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.front_mut();
 		match ret {
-			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(x);}
+			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(SharedPtrBox::new_ref_mut(x));}
 			None => None
 		}
 	}
 
-	pub fn pop_back(&mut self) -> Option<&mut T> {
+	pub fn pop_back(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.back_mut();
 		match ret {
-			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(x);}
+			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(SharedPtrBox::new_ref_mut(x));}
 			None => None
 		}
 	}
@@ -283,11 +301,11 @@ mod tests
 			}
 		}
 
-		fn new_mem(addr:Addr, value:i32) -> &'static Fake {
+		fn new_mem(addr:Addr, value:i32) -> SharedPtrBox<Fake> {
 			let ptr = addr as * mut Fake;
 			let fake = unsafe{ & mut *ptr };
 			fake.value = value;
-			fake
+			SharedPtrBox::new_ptr(ptr)
 		}
 	}
 
@@ -300,11 +318,11 @@ mod tests
 			&mut self.node
 		}
 
-		fn get_from_list_node<'a>(elmt: &'a ListNode) -> &'a Fake {
+		fn get_from_list_node<'a>(elmt: * const ListNode) -> * const Fake {
 			unsafe{&*(elmt as * const ListNode as Addr as * const Fake)}
 		}
 
-		fn get_from_list_node_mut<'a>(elmt: &'a mut ListNode) -> &'a mut Fake {
+		fn get_from_list_node_mut<'a>(elmt: * mut ListNode) -> * mut Fake {
 			unsafe{&mut *(elmt as * mut ListNode as Addr as * mut Fake)}
 		}
 	}
@@ -327,13 +345,13 @@ mod tests
 	#[test]
 	fn push_front() {
 		let mut el1: List<Fake> = List::new();
-		let mut v1 = Fake::new(10);
-		el1.push_front(&mut v1);
+		let v1 = Fake::new(10);
+		el1.push_front(SharedPtrBox::new_ref(&v1));
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,10);
 
-		let mut v2 = Fake::new(11);
-		el1.push_front(&mut v2);
+		let v2 = Fake::new(11);
+		el1.push_front(SharedPtrBox::new_ref(&v2));
 		assert_eq!(el1.front().unwrap().value,11);
 		assert_eq!(el1.back().unwrap().value,10);
 	}
@@ -341,13 +359,13 @@ mod tests
 	#[test]
 	fn push_back() {
 		let mut el1: List<Fake> = List::new();
-		let mut v1 = Fake::new(10);
-		el1.push_front(&mut v1);
+		let v1 = Fake::new(10);
+		el1.push_front(SharedPtrBox::new_ref(&v1));
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,10);
 
-		let mut v2 = Fake::new(11);
-		el1.push_back(&mut v2);
+		let v2 = Fake::new(11);
+		el1.push_back(SharedPtrBox::new_ref(&v2));
 		assert_eq!(el1.front().unwrap().value,10);
 		assert_eq!(el1.back().unwrap().value,11);
 	}
@@ -356,15 +374,15 @@ mod tests
 	fn pop_front() {
 		let mut el1: List<Fake> = List::new();
 
-		let mut v1 = Fake::new(10);
-		el1.push_front(&mut v1);
+		let v1 = Fake::new(10);
+		el1.push_front(SharedPtrBox::new_ref(&v1));
 
-		let mut v2 = Fake::new(11);
-		el1.push_front(&mut v2);
+		let v2 = Fake::new(11);
+		el1.push_front(SharedPtrBox::new_ref(&v2));
 
 		{
-			let e3 = el1.pop_front();
-			assert_eq!(e3.unwrap().value, 11);
+			let e3 = el1.pop_front().unwrap();
+			assert_eq!(e3.value, 11);
 		}
 
 		//checl list
@@ -376,11 +394,11 @@ mod tests
 	fn iterator() {
 		let mut el1: List<Fake> = List::new();
 
-		let mut v1 = Fake::new(0);
-		el1.push_back(&mut v1);
+		let v1 = Fake::new(0);
+		el1.push_back(SharedPtrBox::new_ref(&v1));
 
-		let mut v2 = Fake::new(1);
-		el1.push_back(&mut v2);
+		let v2 = Fake::new(1);
+		el1.push_back(SharedPtrBox::new_ref(&v2));
 
 		//loop
 		for (i,v) in el1.iter().enumerate() {
@@ -388,19 +406,19 @@ mod tests
 		}
 	}
 
-	/*#[test]
+	#[test]
 	fn with_dynamic_alloc() {
 		let mut list: List<Fake> = List::new();
 		for i in 0..10 {
 			let ptr = osmem::mmap(0,4096);
-			let mut fake = Fake::new_mem(ptr, i);
-			list.push_back(&mut fake);
+			let fake = Fake::new_mem(ptr, i);
+			list.push_back(fake);
 		}
 
 		for i in 0..10 {
-			let v = list.pop_front();
-			assert_eq!(v.unwrap().value, i);
-			osmem::munmap(v.unwrap() as * const Fake as Addr, 4096);
+			let v = list.pop_front().unwrap();
+			assert_eq!(v.value, i);
+			osmem::munmap(v.get_addr(), 4096);
 		}
-	}*/
+	}
 }
