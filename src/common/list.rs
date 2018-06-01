@@ -224,13 +224,17 @@ impl <T> List<T>
 		}
 	}
 
-	/*pub fn remove(&mut self, item: & mut T) {
+	pub fn remove(&mut self, mut item: SharedPtrBox<T>) {
 		//get node of new item
-		let item = item.get_list_node_mut();
+		let tmp = item.get_mut();
+		let elt = tmp.get_list_node_mut();
 
 		//update prev
-		item.extract_from_list();
-	}*/
+		//TODO maybe make debug_assert
+		if !self.is_empty() && !elt.is_none() && !elt.is_loop() {
+			elt.extract_from_list();
+		}
+	}
 
 	pub fn front(&self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
@@ -289,8 +293,6 @@ impl <T> List<T>
 	pub fn iter(&self)-> ListIterator<T> {
 		ListIterator::new(self)
 	}
-	//TODO 
-	//Iterator
 }
 
 #[cfg(test)]
@@ -440,6 +442,28 @@ mod tests
 			let v = list.pop_front().unwrap();
 			assert_eq!(v.value, i);
 			osmem::munmap(v.get_addr(), 4096);
+		}
+	}
+	
+	#[test]
+	fn remove() {
+		let mut list: List<Fake> = List::new();
+
+		let v1 = Fake::new(0);
+		list.push_back(SharedPtrBox::new_ref(&v1));
+
+		let v2 = Fake::new(1);
+		list.push_back(SharedPtrBox::new_ref(&v2));
+
+		let v3 = Fake::new(10);
+		list.push_back(SharedPtrBox::new_ref(&v3));
+
+		let ret = list.back().unwrap();
+		list.remove(ret);
+
+		//loop
+		for (i,v) in list.iter().enumerate() {
+			assert_eq!(v.value, i as i32);
 		}
 	}
 }
