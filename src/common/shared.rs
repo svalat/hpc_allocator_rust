@@ -30,6 +30,12 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	pub fn new_addr(data: Addr) -> Self {
+		Self {
+			data: data as * const T,
+		}
+	}
+
 	pub fn new_ref(data: & T) -> Self {
 		Self {
 			data: data as * const T,

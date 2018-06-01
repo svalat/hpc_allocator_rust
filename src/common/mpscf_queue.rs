@@ -191,8 +191,14 @@ mod tests
 			let handler = std::thread::spawn(move|| {
                 for _ in 0..INSERT {
                     let addr = osmem::mmap(0,4096);
-                    let item = addr as * const MPSCFItem as * mut MPSCFItem;
-                    list.get_mut().insert_item(SharedPtrBox::new_ptr_mut(item));
+                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+500));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+1000));
+                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+1500));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+2000));
+                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+2500));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+3000));
+                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+3500));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr));
                 }
 			});
 			handlers.push(handler);
@@ -214,7 +220,10 @@ mod tests
                         let mut next = handler;
                         while !next.is_null() {
                             let mut tmp = next.next;
-                            osmem::munmap(next.get_addr(),4096);
+                            let addr = next.get_addr();
+                            if addr % 4096 == 0 {
+                                osmem::munmap(addr,4096);
+                            }
                             next = tmp;
                             *ccnt.get_mut() += 1;
                         }
@@ -233,6 +242,6 @@ mod tests
 
         let _ = fhandler.join();
 
-        assert_eq!(rcnt, threads * INSERT);
+        assert_eq!(rcnt, threads * INSERT * 4);
     }
 }
