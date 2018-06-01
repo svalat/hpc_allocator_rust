@@ -92,12 +92,24 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	pub fn get_ptr_mut(&mut self) -> * mut T {
+		if self.data.is_null() {
+			panic!("Try to access NULL address !");
+		} else {
+			self.data as * mut T
+		}
+	}
+
 	pub fn get_addr(&self) -> Addr {
 		if self.data.is_null() {
 			panic!("Try to access NULL address !");
 		} else {
 			self.data as Addr
 		}
+	}
+
+	pub fn set_null(&mut self) {
+		self.data = ptr::null();
 	}
 }
 
