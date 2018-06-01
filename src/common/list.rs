@@ -232,48 +232,48 @@ impl <T> List<T>
 		item.extract_from_list();
 	}*/
 
-	pub fn front(&self) -> Option<&T> {
+	pub fn front(&self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
 		} else {
 			let node = self.root.next.as_ref().unwrap().get();
-			Some(<T>::get_from_list_node_ref(node))
+			Some(SharedPtrBox::new_ref(<T>::get_from_list_node_ref(node)))
 		}
 	}
 
-	pub fn front_mut(&mut self) -> Option<& mut T> {
+	pub fn front_mut(&mut self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
 		} else {
 			let node = self.root.next.as_mut().unwrap().get_mut();
 			//Hum can be cleaner but we want to bypass mutability lifetime....
-			Some(<T>::get_from_list_node_ref_mut(node as * mut ListNode))
+			Some(SharedPtrBox::new_ref_mut(<T>::get_from_list_node_ref_mut(node)))
 		}
 	}
 
-	pub fn back(&self) -> Option<&T> {
+	pub fn back(&self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
 		} else {
 			let node = self.root.prev.as_ref().unwrap().get();
-			Some(<T>::get_from_list_node_ref(node))
+			Some(SharedPtrBox::new_ref(<T>::get_from_list_node_ref(node)))
 		}
 	}
 
-	pub fn back_mut(&mut self) -> Option<&mut T> {
+	pub fn back_mut(&mut self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
 		} else {
 			let node = self.root.prev.as_mut().unwrap().get_ptr() as * mut ListNode;
 			//Hum can be cleaner but we want to bypass mutability lifetime....
-			Some(<T>::get_from_list_node_ref_mut(node))
+			Some(SharedPtrBox::new_ref_mut(<T>::get_from_list_node_ref_mut(node)))
 		}
 	}
 
 	pub fn pop_front(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.front_mut();
 		match ret {
-			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(SharedPtrBox::new_ref_mut(x));}
+			Some(mut  x) => {T::get_list_node_mut(x.get_mut()).extract_from_list(); return Some(x);}
 			None => None
 		}
 	}
@@ -281,7 +281,7 @@ impl <T> List<T>
 	pub fn pop_back(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.back_mut();
 		match ret {
-			Some(x) => {x.get_list_node_mut().extract_from_list(); return Some(SharedPtrBox::new_ref_mut(x));}
+			Some(mut x) => {T::get_list_node_mut(x.get_mut()).extract_from_list(); return Some(x);}
 			None => None
 		}
 	}
