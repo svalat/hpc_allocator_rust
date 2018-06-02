@@ -160,6 +160,7 @@ mod tests
     use common::mpscf_queue::*;
     use portability::osmem;
     use core::sync::atomic::AtomicBool;
+    use self::std::{thread, time};
 
     #[test]
     fn basic() {
@@ -209,13 +210,13 @@ mod tests
 			let handler = std::thread::spawn(move|| {
                 for _ in 0..INSERT {
                     let addr = osmem::mmap(0,4096);
-                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+500));
-                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+1000));
-                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+1500));
-                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+2000));
-                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+2500));
-                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+3000));
-                    //list.get_mut().insert_item(SharedPtrBox::new_addr(addr+3500));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+1*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+2*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+3*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+4*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+5*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+6*512));
+                    list.get_mut().insert_item(SharedPtrBox::new_addr(addr+7*512));
                     list.get_mut().insert_item(SharedPtrBox::new_addr(addr));
                 }
 			});
@@ -256,10 +257,12 @@ mod tests
 			let _ = handler.join();
 		}
 
+        let delay = time::Duration::from_millis(10);
+        thread::sleep(delay);
         run.store(false, Ordering::Relaxed);
 
         let _ = fhandler.join();
 
-        assert_eq!(rcnt, threads * INSERT * 4);
+        assert_eq!(rcnt, threads * INSERT * 8);
     }
 }
