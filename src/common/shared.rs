@@ -6,11 +6,12 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This file provide a shared box mechanism to spread a same object into several others
-///As inside the allocator we manage our memory ourself we do not manager automatic free
-///inside the container
-///**CAUTION** This is unsafe, you need to protect content by spinlock or ensure adequate usage.
-///**TODO** Hum, rust have core::ptr::Shared but not enabled by default, keep an eye on it.
+/// This file provide a shared box mechanism to spread a same object into several others
+/// As inside the allocator we manage our memory ourself we do not manager automatic free
+/// inside the container
+/// 
+/// **CAUTION** This is unsafe, you need to protect content by spinlock or ensure adequate usage.
+/// **TODO** Hum, rust have core::ptr::Shared but not enabled by default, keep an eye on it.
 
 //import
 use common::types::Addr;
@@ -18,58 +19,82 @@ use core::marker::{Sync,Send};
 use core::ptr;
 use core::ops::{Deref, DerefMut};
 
+/// Define the struct which mostly contain a raw pointer to the data to share.
 #[derive(Copy)]
 pub struct SharedPtrBox<T> {
 	data: * const T,
 }
 
 impl <T> SharedPtrBox<T> {
+	/// Setup the container as NULL.
 	pub fn new_null() -> Self {
 		Self {
 			data: ptr::null(),
 		}
 	}
 
+	/// Build the container from the Addr value considered as a pointer.
+	/// Usefull if need to point memory directly from mmap.
 	pub fn new_addr(data: Addr) -> Self {
 		Self {
 			data: data as * const T,
 		}
 	}
 
+	/// Build the container from a const reference to the data to point.
+	/// **Caution**: this is usefull for unit test but in practive your need to ensure
+	/// that the object live long enougth as the compiler will not check for you.
 	pub fn new_ref(data: & T) -> Self {
 		Self {
 			data: data as * const T,
 		}
 	}
 
+	/// Build the container from a const reference to the data to point.
+	/// 
+	/// Prefer this function to the one with const ref as it is closer to what really to the shared pointer.
+	///
+	/// **Caution**: this is usefull for unit test but in practive your need to ensure
+	/// that the object live long enougth as the compiler will not check for you.
 	pub fn new_ref_mut(data: &mut T) -> Self {
 		Self {
 			data: data as * const T,
 		}
 	}
 
+	/// Build the container from the const pointer to object.
+	/// Also prefer use the mutable version.
+	/// You can also use ptr::null() to point nothing but prefer calling new_null() in this case.
 	pub fn new_ptr(data: * const T) -> Self {
 		Self {
 			data: data,
 		}
 	}
-	
+
+	/// Build the container from the const pointer to object.
+	/// You can also use ptr::null() to point nothing but prefer calling new_null() in this case.	
 	pub fn new_ptr_mut(data: * mut T) -> Self {
 		Self {
 			data: data,
 		}
 	}
 
+	/// Return a mutable refernce to the pointed object.
+	/// In debug mode this crash if pointer is Null but not in release mode.
 	pub fn get_mut(&mut self) -> &mut T {
 		debug_assert!(!self.data.is_null());
 		unsafe{&mut *(self.data as * mut T)}
 	}
 
+	/// Return a const refernce to the pointed object.
+	/// In debug mode this crash if pointer is Null but not in release mode.
 	pub fn get(&self) -> &T {
 		debug_assert!(!self.data.is_null());
 		unsafe{& *self.data}
 	}
 
+	/// Return a mutable refernce to the pointed object.
+	/// This one make a real check and use Option to safely return the state to the caller if Null.
 	pub fn get_safe_mut(&mut self) -> Option<&mut T> {
 		if self.data.is_null() {
 			None
@@ -78,6 +103,8 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	/// Return a const refernce to the pointed object.
+	/// This one make a real check and use Option to safely return the state to the caller if Null.
 	pub fn get_safe(&self) -> Option<&T> {
 		if self.data.is_null() {
 			None
@@ -86,10 +113,12 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	/// Check if the container is Null.
 	pub fn is_null(&self) -> bool {
 		self.data.is_null()
 	}
 
+	/// Return the internal pointer. This panic if it is NULL.
 	pub fn get_ptr(&self) -> * const T {
 		if self.data.is_null() {
 			panic!("Try to access NULL address !");
@@ -98,6 +127,7 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	/// Return a mutable pointer. This panic if it is NULL.
 	pub fn get_ptr_mut(&mut self) -> * mut T {
 		if self.data.is_null() {
 			panic!("Try to access NULL address !");
@@ -106,6 +136,7 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	/// Return pointer as an address. It panic if it is NULL.
 	pub fn get_addr(&self) -> Addr {
 		if self.data.is_null() {
 			panic!("Try to access NULL address !");
@@ -114,24 +145,26 @@ impl <T> SharedPtrBox<T> {
 		}
 	}
 
+	/// Make it NULL.
 	pub fn set_null(&mut self) {
 		self.data = ptr::null();
 	}
 }
 
-///Implement deref for spin lock guard
+/// Implement deref for spin lock guard
 impl<T> Deref for SharedPtrBox<T>
 {
     type Target = T;
     fn deref(& self) -> & T { self.get() }
 }
 
-///Implement deref mutable for spin lock guard
+/// Implement deref mutable for spin lock guard
 impl<T> DerefMut for SharedPtrBox<T>
 {
     fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
 }
 
+/// Implement clone.
 impl <T> Clone for SharedPtrBox<T> {
 	fn clone(&self) -> Self { 
 		Self {

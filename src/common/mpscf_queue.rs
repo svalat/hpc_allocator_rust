@@ -13,6 +13,10 @@
 /// This is used inside the allocator to handle remote free. A remote free can be registrerd to the local
 /// allocator by all the remote threads. Then the local allocator flush in one go all the pending allocs
 /// to freed.
+/// 
+/// This is to store object which owned their own memory so we have to put a MPSCFItem inside the objects
+/// we want to register into this list. Then it is the responsibility of the user to allocate/free the objects.
+/// Which is fine as it is use by the allocator itself.
 
 //import
 use common::shared::SharedPtrBox;
@@ -20,19 +24,21 @@ use core::sync::atomic::{Ordering,AtomicPtr};
 use core::ptr;
 use core::mem;
 
-//base item
+/// Define the basic item to be chains in one way into the list (so next pointer).
+/// It uses the ShardPtrBox to bypass ownership and mutability checking.
 #[derive(Copy,Clone)]
 pub struct MPSCFItem {
     next: SharedPtrBox<MPSCFItem>,
 }
 
-//the queue object
+/// Define the queue object as two atmic pointers : head and tail.
 pub struct MPSCFQueue {
     head: AtomicPtr<MPSCFItem>,
     tail: AtomicPtr<MPSCFItem>,
 }
 
 impl MPSCFItem {
+    /// Create a new istem whic is init with a Null pointer into next.
     pub fn new() -> Self {
         Self {
             next: SharedPtrBox::new_null(),
@@ -41,6 +47,7 @@ impl MPSCFItem {
 }
 
 impl MPSCFQueue {
+    /// Create a new empty list (so head/tail are NULL).
     pub fn new() -> Self {
         Self {
             head:AtomicPtr::new(ptr::null_mut()),
@@ -48,10 +55,17 @@ impl MPSCFQueue {
         }
     }
 
+    /// Check if the list is empty.
     pub fn is_empty(&self) -> bool {
         self.head.load(Ordering::Relaxed).is_null()
     }
 
+    /// Insert an item into the list. This operation can be done by several threads concurently.
+    /// 
+    /// Notice this operation required two atomic operations, a swap and a store. There can
+    /// be delay between the two due to OS scheduling. In order the fix this, the dequeue_all()
+    /// method use wait_until_end_id() to check consistency and wait until it is true. Ths fix
+    /// the delay issue betweeen the two atomic operations.
     pub fn insert_item(&mut self,mut item: SharedPtrBox<MPSCFItem>) {
        //errors
         debug_assert!(!item.is_null());
@@ -100,6 +114,10 @@ impl MPSCFQueue {
         debug_assert!(cur.next.is_null());
     }
 
+    /// Flush all the elemnt into the list and return the first one, then the user has to go througth
+    /// all of them to make the required operation.
+    /// 
+    /// This must be called by a uniq thread (or protected by lock).
     pub fn dequeue_all(&mut self) -> Option<SharedPtrBox<MPSCFItem>> {
         // read head and mark it as NULL
         let head = self.head.load(Ordering::Relaxed);

@@ -6,21 +6,28 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module implement a double link list by using a list node stored
-///into the objects we want to chain. This is to be efficient an use the
-///available memory by placing the header inside the memory we want to track.
+/// This module implement a double link list by using a list node stored
+/// into the objects we want to chain. This is to be efficient an use the
+/// available memory by placing the header inside the memory we want to track.
+/// 
+/// This list use a SharedPtrBox to track the pointer (which cannot be null, so we use Option).
+/// This is a way to bypass all the mutability and ownership as we handle the lifetime of the chunks
+/// inside the allocator itself.
 
 //import
 use common::shared::SharedPtrBox;
 use core::marker::PhantomData;
 use core::iter::Iterator;
 
-///Basic list node header to be embedded into the object to chain as a list
+/// Basic list node header to be embedded into the object to chain as a list
 pub struct ListNode {
 	prev: Option<SharedPtrBox<ListNode>>,
 	next: Option<SharedPtrBox<ListNode>>,
 }
 
+/// Trait to be implemented by the structs which can be placed into that link list.
+/// This mostly implement access to the local ListNode field to contain next/prev
+/// and to come back from this to the original object.
 pub trait Listable<T> {
 	fn get_list_node<'a>(&'a self) -> &'a ListNode;
 	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode;
@@ -36,12 +43,14 @@ pub trait Listable<T> {
 	}
 }
 
+/// Implement iterator to loop over the list.
 pub struct ListIterator<'a,T> {
 	root: &'a ListNode,
 	cur: SharedPtrBox<ListNode>,
 	phantom: PhantomData<T>,
 }
 
+/// Define the list which mostly consist in a root element.
 pub struct List<T> 
 	where T: Listable<T>
 {
@@ -49,9 +58,11 @@ pub struct List<T>
 	phantom: PhantomData<T>,
 }
 
+/// Implement the iterator.
 impl <'a,T> ListIterator<'a,T> 
 	where T: Listable<T>
 {
+	/// Create a new iterator, argument is the list to iterate over.
 	fn new(list:&'a List<T>) -> Self {
 		let cur;
 
@@ -68,12 +79,14 @@ impl <'a,T> ListIterator<'a,T>
 	}
 }
 
-
+/// Implement the iterator interface so we can use the for loop.
 impl <'a,T> Iterator for ListIterator<'a,T> 
 	where T: Listable<T> + 'a
 {
+	/// Define item to return.
 	type Item = SharedPtrBox<T>;
 
+	/// Return the next element or None if at the end of list.
 	fn next(&mut self) -> Option<SharedPtrBox<T>> {
 		//empty list
 		if self.cur.is_null() {
@@ -94,7 +107,9 @@ impl <'a,T> Iterator for ListIterator<'a,T>
 	}
 }
 
+/// Implement a list node.
 impl ListNode {
+	/// Create a new list node which point None on both ext and prev.
 	pub fn new() -> Self {
 		Self {
 			prev: None,
@@ -102,20 +117,25 @@ impl ListNode {
 		}
 	}
 
+	/// Setup the element as a loop where next and prev point to self. This make the life
+	/// easier for insertion/removal operation in the list.
 	pub fn init_as_loop(&mut self) {
 		self.prev = Some(SharedPtrBox::new_ref_mut(self));
 		self.next = Some(SharedPtrBox::new_ref_mut(self));
 	}
 
+	/// Make it as none as if it is a fresh node.
 	pub fn init_as_none(&mut self) {
 		self.prev = None;
 		self.next = None;
 	}
 
+	/// Check if is none.
 	pub fn is_none(&self) -> bool {
 		self.prev.is_none() || self.next.is_none()
 	}
 
+	/// Check if is a look to itself.
 	pub fn is_loop(&self) -> bool {
 		if self.prev.is_some() && self.next.is_some() {
 			let pprev = self.prev.as_ref().unwrap().get_ptr();
@@ -131,6 +151,7 @@ impl ListNode {
 		}
 	}
 
+	/// Remove the element from the list it belong to.
 	pub fn extract_from_list(&mut self) {
 		//update prev
 		self.prev.as_mut().unwrap().get_mut().next = self.next.clone();
@@ -141,9 +162,11 @@ impl ListNode {
 	}
 }
 
+/// Implement the list operations.
 impl <T> List<T> 
 	where T: Listable<T>
 {
+	/// Create an empty list.
 	pub fn new() -> Self {
 		Self {
 			root: ListNode::new(),
@@ -151,10 +174,12 @@ impl <T> List<T>
 		}
 	}
 
+	/// Check if the list is empty.
 	pub fn is_empty(&self) -> bool {
 		self.root.is_loop() || self.root.is_none()
 	}
 
+	/// Insert the given element at the end of the list.
 	pub fn push_back(&mut self, item: SharedPtrBox<T>) {
 		//check
 		assert!(!item.is_null());
@@ -179,6 +204,7 @@ impl <T> List<T>
 		self.root.prev = Some(SharedPtrBox::new_ref_mut(&mut item));
 	}
 
+	/// Insert the given element at beginning of the list.
 	pub fn push_front(&mut self, item: SharedPtrBox<T>) {
 		//check
 		assert!(!item.is_null());
@@ -203,6 +229,7 @@ impl <T> List<T>
 		self.root.next = Some(SharedPtrBox::new_ref_mut(&mut item));
 	}
 
+	/// Used to hard check the elements of the list to detect bugs.
 	pub fn do_hard_checking(&self) {
 		if !self.is_empty() {
 			let mut cur = &self.root;
@@ -224,6 +251,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Remove the given element from the list.
 	pub fn remove(&mut self, mut item: SharedPtrBox<T>) {
 		//get node of new item
 		let tmp = item.get_mut();
@@ -236,6 +264,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Return the first element of the list.
 	pub fn front(&self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
@@ -245,6 +274,8 @@ impl <T> List<T>
 		}
 	}
 
+	/// Return the first element of a mutable list.
+	/// TODO this is not really usefull as we return a SharedPtrBox which bypass all mut checks.
 	pub fn front_mut(&mut self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
@@ -255,6 +286,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Return the last element of the list.
 	pub fn back(&self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
@@ -264,6 +296,8 @@ impl <T> List<T>
 		}
 	}
 
+	/// Return the last elemnt of a mutable list
+	/// TODO this is not really usefull as we return a SharedPtrBox which bypass all mut checks.
 	pub fn back_mut(&mut self) -> Option<SharedPtrBox<T>> {
 		if self.is_empty() {
 			None
@@ -274,6 +308,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Extract and return the first element of a list.
 	pub fn pop_front(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.front_mut();
 		match ret {
@@ -282,6 +317,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Extract and return the last element of a list.
 	pub fn pop_back(&mut self) -> Option<SharedPtrBox<T>> {
 		let ret = self.back_mut();
 		match ret {
@@ -290,6 +326,7 @@ impl <T> List<T>
 		}
 	}
 
+	/// Return an iterator to iterate over the list.
 	pub fn iter(&self)-> ListIterator<T> {
 		ListIterator::new(self)
 	}

@@ -8,9 +8,9 @@
 
 ///The address space is split into regions which are huge (1TB) we then put pointers
 ///to map the segments into this region.
-
-//import
-extern crate libc;
+/// 
+/// TODO we should check the real memory consumption of this component and maybe
+/// splid in smaller regions.
 
 //import
 use common::consts::*;

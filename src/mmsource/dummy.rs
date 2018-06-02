@@ -23,6 +23,9 @@ pub struct DummyMMSource {
 }
 
 impl DummyMMSource {
+	/// Create a new memory source. It optionally take a region registry to be used for registration.
+	/// 
+	/// TODO we should use a SharedPtrBox instead of bypassing locally the ownership and casting to pointers.
 	pub fn new(registry: Option<& mut RegionRegistry>) -> DummyMMSource {
 		let ptr;
 		
@@ -36,12 +39,14 @@ impl DummyMMSource {
 		}
 	}
 
+	/// Retur reference to the registry for internal use.
 	#[inline]
 	fn get_registry(&mut self) -> &mut RegionRegistry {
 		ops::ref_from_option_ptr(self.registry)
 	}
 }
 
+/// Implement the memory source trait to be use inside chunk managers and allocators.
 impl MemorySource for DummyMMSource {
 	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<& mut ChunkManager>) -> (RegionSegment, bool)
 	{

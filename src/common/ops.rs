@@ -11,11 +11,13 @@
 
 use common::types::Size;
 
+/// Ceil the given size to the closer alignement. Alignement should be a power of 2.
 #[inline]
 pub fn ceil_to_power_of_2(size:Size,align:Size) -> Size {
 	size & !(align-1)
 }
 
+/// Round up the given size to the closer alignement. Alignement should be a power of 2.
 #[inline]
 pub fn up_to_power_of_2(size:Size,align:Size) -> Size {
 	let ret;
@@ -29,6 +31,8 @@ pub fn up_to_power_of_2(size:Size,align:Size) -> Size {
 	ret
 }
 
+/// Helper function to be used by some functions, it convert an optional reference to pointer.
+/// If Option is None, then the pointer is set to NULL.
 #[inline]
 pub fn ptr_from_option_ref<T>(value:Option<&mut T>) -> * mut T {
 	match value {
@@ -37,6 +41,8 @@ pub fn ptr_from_option_ref<T>(value:Option<&mut T>) -> * mut T {
 	}
 }
 
+/// Make the other way by converting an Optional pointer into a ref. The function
+/// use unwrap() so will crash if option is None.
 #[inline]
 pub fn ref_from_option_ptr<'a,T>(value:Option<* mut T>) -> &'a mut T {
 	unsafe{&mut *value.unwrap()}

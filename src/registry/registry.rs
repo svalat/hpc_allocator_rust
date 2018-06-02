@@ -6,8 +6,12 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This implement the region registry to keep track of all the allocated segments
-///and map their related chunk manager.
+/// This implement the region registry to keep track of all the allocated segments
+/// and map their related chunk manager.
+///
+/// **Trick**: The region registry need to use RegionSegment (macro blocs) which are larger
+/// than a given size. But we do not require a size exactly multiple of it because we can handle
+/// overlapping on one entries.
 
 //import
 use common::consts::*;
@@ -36,6 +40,12 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Setup a new entry and building the related RegionSegment from given address. It
+	/// also register it inside the registry before returning the region segment.
+	/// 
+	/// @param ptr Address to use and where to store the segment header.
+	/// @param total_size Define the total size of the segment (accounting the RegionSegment header).
+	/// @param manager Optional pointer to a manager to register to the RegionRegistry.
 	pub fn set_entry( &mut self, ptr: Addr ,total_size: Size,manager: *mut ChunkManager) -> RegionSegment {
 		//errors
 		debug_assert!(ptr != 0);
@@ -48,6 +58,7 @@ impl RegionRegistry {
 		res
 	}
 	
+	/// Register an existing segment.
 	pub fn set_segment_entry( &mut self, segment: RegionSegment ) {
 		//errors
 		segment.full_sanitify_check();
@@ -76,6 +87,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Internal function used to register one entry into the region registry (a segment might cover many).
 	fn set_one_segment_entry(&mut self, ptr:Addr, segment: RegionSegment) {
 		if ptr > PHYS_MAX_ADDR {
 			//TODO use warning
@@ -102,9 +114,12 @@ impl RegionRegistry {
 		assert!(!self.get_region(ptr).unwrap().get(id).is_null());
 	}
 
-	//TODO see if we can avoid duplication with set_one_segment_entry by playing with some
-	//mut ref
-	fn unset_on_segment_entry(&mut self, ptr:Addr, entry: RegionSegmentPtr) {
+	/// Unset an entry into the registry. As for set_one_segment_entry it might be required
+	/// to unse many entries for one segment.
+	/// 
+	/// TODO see if we can avoid duplication with set_one_segment_entry by playing with some
+	/// mut ref
+	fn unset_one_segment_entry(&mut self, ptr:Addr, entry: RegionSegmentPtr) {
 		if ptr > PHYS_MAX_ADDR {
 			//TODO use warning
 			//allocWarning("Invalid address range in request for region registry : %p !",ptr);
@@ -125,11 +140,13 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Check if as a registered entry for the given address.
 	pub fn has_entry(&self, ptr: Addr) -> bool {
 		let seg = self.get_segment(ptr);
 		! seg.is_none()
 	}
 
+	/// Return the segment related to a given address and panic if not found.
 	#[inline]
 	pub fn get_segment_safe(&self, ptr:Addr) -> RegionSegment {
 		let seg = self.get_segment(ptr);
@@ -139,6 +156,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Optionally return the region of a given address.
 	fn get_region_entry(&self,ptr:Addr) -> Option<RegionSegment> {
 		if ptr > PHYS_MAX_ADDR {
 			//allocWarning("Invalid address range in request for region registry : %p !",ptr);
@@ -168,6 +186,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Optionally return the segment of a given address.
 	pub fn get_segment(& self,ptr: Addr) -> Option<RegionSegment> {
 		let mut entry = self.get_region_entry(ptr);
 		
@@ -192,6 +211,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Remove the registration at a given address.
 	pub fn remove_from_ptr(&mut self,ptr: Addr) {
 		let seg = self.get_segment(ptr);
 		match seg {
@@ -200,6 +220,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// unregister the given segment.
 	pub fn remove_from_segment(&mut self, segment: RegionSegment) {
 		//check
 		segment.sanity_check();
@@ -211,11 +232,12 @@ impl RegionRegistry {
 		//loop
 		let mut offset = 0;
 		while offset < size {
-			self.unset_on_segment_entry(ptr + offset, segment.get_ptr());
+			self.unset_one_segment_entry(ptr + offset, segment.get_ptr());
 			offset += REGION_SPLITTING;
 		}
 	}
 
+	/// Internage function to get the region corresponding to a given address.
 	fn get_region(&self,ptr:Addr) -> Option<&Region> {
 		let id = self.get_region_id(ptr);
 		if self.regions.nolock_safe_read()[id].is_null() {
@@ -225,7 +247,7 @@ impl RegionRegistry {
 		}
 	}
 
-	//TODO
+	/// Simiar to get_region but create the regoin if not present.
 	fn get_region_or_create(&mut self,ptr: Addr) -> &mut Region {
 		let id = self.get_region_id(ptr);
 		if self.regions.nolock_safe_read()[id].is_null() {
@@ -235,6 +257,7 @@ impl RegionRegistry {
 		}
 	}
 
+	/// Create a new region for the given address.
 	fn setup_new_region(&mut self, ptr:Addr) -> &mut Region {
 		let ret;
 	
@@ -274,6 +297,7 @@ impl RegionRegistry {
 		unsafe {&mut *(ret as * mut Region)}
 	}
 
+	/// Compute the region ID for a given address.
 	fn get_region_id(&self, addr: Addr) -> Size {
 		//errors
 		debug_assert!(addr != 0);
@@ -286,6 +310,7 @@ impl RegionRegistry {
 		id
 	}
 
+	/// Unmap all the registred memory. This might be usefull for some unit tests.
 	fn unmap_all_memory(&mut self) {
 		let mut regions = self.regions.lock();
 		
