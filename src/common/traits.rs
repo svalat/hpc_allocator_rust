@@ -47,6 +47,11 @@ pub trait MemorySource {
     /// rely on allocator + copy + deallocation. It also take care of moving the registration into the
     /// RegionRegisty. We can also change the ChunkManager owning the segment.
 	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<& mut ChunkManager>) -> RegionSegment;
-	fn unmap(&mut self,segment: RegionSegment);
+	
+    /// Unmap the segment. Then we can decide in the MemorySource if we keep it for latter use of if we return
+    /// it to the OS.
+    fn unmap(&mut self,segment: RegionSegment);
+
+    //TODO see if we need.
 	//virtual bool haveEfficientRemap(void) const = 0;
 }
