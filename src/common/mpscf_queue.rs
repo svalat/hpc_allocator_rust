@@ -231,12 +231,14 @@ mod tests
         let fhandler = std::thread::spawn(move|| {
             let crun = crun.get_mut();
             let mut ccnt = ccnt.clone();
-            while crun.load(Ordering::Relaxed) {
+            let mut has = true;
+            while crun.load(Ordering::Relaxed) || has {
                 //check
                 let handler = clist.get_mut().dequeue_all();
                 match handler {
                     Some(handler) => {
                         let mut next = handler;
+                        has = true;
                         while !next.is_null() {
                             let mut tmp = next.next;
                             let addr = next.get_addr();
@@ -247,7 +249,9 @@ mod tests
                             *ccnt.get_mut() += 1;
                         }
                     },
-                    None => {}
+                    None => {
+                        has = false;
+                    }
                 } 
             }   
         });
