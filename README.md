@@ -1,5 +1,7 @@
 # HPC Allocator Rust
 
+[![Build Status](https://travis-ci.org/svalat/hpc_allocator_rust.svg?branch=master)](https://travis-ci.org/svalat/hpc_allocator_rust)
+
 It is a small project to try to push rust in his limit and better understant the low level aspects of the language.
 
 This is a reimplemenation of the C version of MPC\_Allocator embeded into the MPC framework (http://mpc.hpcframework.paratools.com/).
