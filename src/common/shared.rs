@@ -164,7 +164,8 @@ impl<T> DerefMut for SharedPtrBox<T>
     fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
 }
 
-/// Implement clone.
+/// Implement clone.chunk
+/// TODO this was to fix some issues but we might use [derive] for this.
 impl <T> Clone for SharedPtrBox<T> {
 	fn clone(&self) -> Self { 
 		Self {
@@ -173,7 +174,10 @@ impl <T> Clone for SharedPtrBox<T> {
 	}
 }
 
+/// Make it usable into threads
 unsafe impl <T> Sync for SharedPtrBox<T> {}
+
+/// Make it usable into closures.
 unsafe impl <T> Send for SharedPtrBox<T> {}
 
 #[cfg(test)]
