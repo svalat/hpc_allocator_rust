@@ -56,3 +56,6 @@ pub const MMSRC_MAX_SIZE: Size = 16*1024*1024;
 pub const MMSRC_THREASHOLD: Size = 8*1024*1204;
 ///Keep non used part of segment when required less (if big enougth)
 pub const MMSRC_KEEP_RESIDUT: bool = false;
+
+///Magick number used by padded chunks.
+pub const PADDED_CHUNK_MAGICK: u8 = 0x42;

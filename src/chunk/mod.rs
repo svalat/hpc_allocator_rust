@@ -9,3 +9,5 @@
 ///Implement all the chunk managers
 
 pub mod dummy;
+pub mod huge;
+pub mod pad;
