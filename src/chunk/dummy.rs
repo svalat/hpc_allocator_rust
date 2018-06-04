@@ -50,7 +50,7 @@ impl ChunkManager for DummyChunkManager {
         panic!("This is fake implementation, should not be called !");
     }
 
-	fn is_thread_safe(&mut self) -> bool {
+	fn is_thread_safe(& self) -> bool {
         panic!("This is fake implementation, should not be called !");
     }
 
@@ -58,11 +58,11 @@ impl ChunkManager for DummyChunkManager {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn set_parent_chunk_manager(&mut self,_parent: * mut ChunkManager) {
+    fn set_parent_chunk_manager(&mut self,_parent: Option<* mut ChunkManager>) {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn get_parent_chunk_manager(&mut self) -> * mut ChunkManager {
+    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager> {
         panic!("This is fake implementation, should not be called !");
     }
 }

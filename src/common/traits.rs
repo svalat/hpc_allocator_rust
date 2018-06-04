@@ -22,10 +22,8 @@ use registry::segment::RegionSegment;
 /// and it provided by the allocator trait.
 ///
 /// This is because the chunk manager are registered into the region registry to 
-/// handle alive chunks.
-///
-/// In practive all implementation of ChunkManager will also implement Allocator but
-/// we prefer to split the two mecanisms in a clear way.
+/// handle alive chunks. In practive they also export a malloc function but which
+/// is not needed in the abstract view (ChunkManager).
 pub trait ChunkManager {
     /// Free the given address.
 	fn free(&mut self,addr: Addr);
@@ -52,32 +50,33 @@ pub trait ChunkManager {
 
 	/// Check if the chunk manager if by itself thread safe, this can avoid to take some locks
     /// into the upper layer.
-	fn is_thread_safe(&mut self) -> bool;
+	fn is_thread_safe(&self) -> bool;
 
     /// Registry the given segment as a remote free. It can be handled now or latter
     /// on call for flush_remote().
 	fn remote_free(&mut self,ptr: Addr);
 
     /// attach a parent to the current chunk manager if not already done at build time.
-    fn set_parent_chunk_manager(&mut self,parent: * mut ChunkManager);
+    fn set_parent_chunk_manager(&mut self,parent: Option<* mut ChunkManager>);
 
     /// get the current parent chunk manager if has a hierarchie.
     /// This is used to support remote free and realloc going from one chunk to another.
-    fn get_parent_chunk_manager(&mut self) -> * mut ChunkManager;
+    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager>;
 }
 
 /// Define the interace which need to be followed by a memory allocator.
-pub trait Allocator {
+pub trait Allocator: ChunkManager
+{
     /// Allocate a chunk of given size and alignement and with given zero constrain.
     /// It return a tuple with the given address (0 if fail) and a boolean telling if the
     /// memoury has already been zeroed.
-    fn malloc(size: Size,align: Size,zero_filled: bool) -> (Addr,bool);
+    fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool);
 
     /// Check if the given chunk manager is the current one
-	fn is_local_chunk_manager(manager: * const ChunkManager) -> bool;
+	fn is_local_chunk_manager(&self, manager: * const ChunkManager) -> bool;
 
     /// Apply flush operation on pending remote frees registred into the chunk manager
-    fn flush_remote();
+    fn flush_remote(&mut self);
 }
 
 /// Define a memory source which is used to allocate, deallocate and resize macro blocs. It also

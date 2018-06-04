@@ -10,7 +10,7 @@
 /// the allocator
 
 use core::mem;
-use common::types::Size;
+use common::types::{SSize,Size};
 
 //global values
 /// Define basic alignement handled by standared chunk manager for any size larger than this one.
@@ -19,14 +19,16 @@ pub const BASIC_ALIGN: Size = mem::size_of::<usize>();
 pub const SMALL_PAGE_SIZE: Size = 4096;
 //#define MAGICK_VALUE 42
 //#define NB_FREE_LIST 50
-//#define UNSUPPORTED 0u
+/// To return some unsuported value for getting requested size from chunk managers
+pub const UNSUPPORTED: Size = 0;
 //#define ALLOC_MIN_SIZE (2*BASIC_ALIGN)
-//TODO setup value
-//#define REALLOC_THREASHOLD 64
+/// Minimal size to generate a realloc in huge and medium chunk manager.
+pub const REALLOC_THREASHOLD: SSize = 64;
 /// Define the basic macro bloc size, used to split the region registry. This is
 /// The minimum size we can allocate inside the memory source.
 pub const MACRO_BLOC_SIZE: Size = 2*1024*1024;
-//#define MEDIUM_MIN_INNER_SIZE 16
+/// Minimal inner size for medium chunks.
+pub const MEDIUM_MIN_INNER_SIZE: Size = 16;
 //#define ADDR_NULL 0
 //#define ALLOC_DO_WARNING true
 //#define HUGE_ALLOC_THREASHOLD (MACRO_BLOC_SIZE/2)
