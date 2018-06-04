@@ -48,7 +48,7 @@ impl DummyMMSource {
 
 /// Implement the memory source trait to be use inside chunk managers and allocators.
 impl MemorySource for DummyMMSource {
-	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<& mut ChunkManager>) -> (RegionSegment, bool)
+	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<* mut ChunkManager>) -> (RegionSegment, bool)
 	{
 		//errors
 		debug_assert!(inner_size > 0);
@@ -74,10 +74,10 @@ impl MemorySource for DummyMMSource {
 		let has_manager = !manager.is_none();
 		if !self.registry.is_none() && has_manager {
 			let registry = unsafe{&mut *self.registry.unwrap()};
-			let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
+			let pmanager = manager.unwrap();
 			res = registry.set_entry(ptr,total_size,pmanager);
 		} else {
-			let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
+			let pmanager = manager.unwrap();
 			res = RegionSegment::new(ptr,total_size,Some(pmanager));
 		}
 
@@ -85,7 +85,7 @@ impl MemorySource for DummyMMSource {
 		(res,true)
 	}
 
-	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<& mut ChunkManager>) -> RegionSegment
+	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<* mut ChunkManager>) -> RegionSegment
 	{
 		//errors
 		old_segment.sanity_check();
@@ -109,7 +109,7 @@ impl MemorySource for DummyMMSource {
 		//register
 		let res;
 		let has_manager = manager.is_some();
-		let pmanager = manager.unwrap() as *const ChunkManager as *mut ChunkManager;
+		let pmanager = manager.unwrap();
 		if self.registry.is_some() && has_manager {
 			res = self.get_registry().set_entry(ptr,total_size,pmanager);
 		} else {

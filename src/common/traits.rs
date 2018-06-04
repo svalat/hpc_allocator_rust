@@ -41,12 +41,12 @@ pub trait MemorySource {
     /// @parma manager Optionally define a chunk manager to be used to register the segment into the region registry.
     /// 
     /// @return Return the RegionSegment and a boolean telling is the segment has been zeroed of not.
-	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: Option<& mut ChunkManager>) -> (RegionSegment, bool);
+	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: Option<* mut ChunkManager>) -> (RegionSegment, bool);
 
     /// Remap an existing segment. This on Linux directly redirect to mremap but can on some other system
     /// rely on allocator + copy + deallocation. It also take care of moving the registration into the
     /// RegionRegisty. We can also change the ChunkManager owning the segment.
-	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<& mut ChunkManager>) -> RegionSegment;
+	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<* mut ChunkManager>) -> RegionSegment;
 	
     /// Unmap the segment. Then we can decide in the MemorySource if we keep it for latter use of if we return
     /// it to the OS.

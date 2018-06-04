@@ -50,9 +50,9 @@ pub const PHYS_MAX_ADDR: Size = 1 << PHYS_ADDR_BITS;
 /// Max number of regions to handle in the region registry.
 pub const MAX_REGIONS: Size = PHYS_MAX_ADDR / REGION_SIZE;
 
-///Define maximum size of segments to keep in the memory source
+///Define the maximum size of total memory stored into the memory source.
 pub const MMSRC_MAX_SIZE: Size = 16*1024*1024;
-///TODO doc
+///Define maximum size of segments to keep in the memory source
 pub const MMSRC_THREASHOLD: Size = 8*1024*1204;
 ///Keep non used part of segment when required less (if big enougth)
 pub const MMSRC_KEEP_RESIDUT: bool = false;
