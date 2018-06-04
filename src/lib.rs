@@ -8,6 +8,8 @@
 
 //we want to avoid to take special language things inside the allocator
 #![feature(lang_items,core,libc)]
+#![feature(panic_implementation)]
+#![feature(core_intrinsics)]
 #![no_std]
 #![allow(dead_code)]
 

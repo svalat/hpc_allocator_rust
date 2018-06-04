@@ -16,6 +16,8 @@ use registry::registry::RegionRegistry;
 use mmsource::dummy::DummyMMSource;
 use chunk::dummy::DummyChunkManager;
 use common::traits::MemorySource;
+use core::panic::PanicInfo;
+use core::intrinsics;
 
 // Entry point for this program
 #[no_mangle]
@@ -35,8 +37,10 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 #[lang = "eh_personality"] 
 extern fn eh_personality() {}
 
-#[lang = "panic_fmt"] 
-fn panic_fmt() -> ! { loop {} }
+#[panic_implementation]
+fn panic(_info: &PanicInfo) -> ! {
+    unsafe { intrinsics::abort() }
+}
 
 #[lang = "eh_unwind_resume"]
 #[no_mangle]

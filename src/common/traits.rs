@@ -9,20 +9,75 @@
 ///This file define the allocator abstraction layout
 ///In rust this represent mostly the Trait.
 
-use common::types::Size;
+use common::types::{Size,Addr};
 use registry::segment::RegionSegment;
 
 /// A chunk manager is an object handling the sub allocation inside a macro bloc. We will
 /// find many types inside the allocator : huge, medium and small with various way to handle it.
 /// This chunk manager will be pointed by the RegionRegistry so we can now how to deallocate, reallocate....
 /// the chunk inside a given macro bloc.
+///
+/// The chunk manager provide only function to handle the already allocated chunks, so
+/// free/realloc/request size... The malloc function itself is not needed in this abstraction
+/// and it provided by the allocator trait.
+///
+/// This is because the chunk manager are registered into the region registry to 
+/// handle alive chunks.
+///
+/// In practive all implementation of ChunkManager will also implement Allocator but
+/// we prefer to split the two mecanisms in a clear way.
 pub trait ChunkManager {
+    /// Free the given address.
+	fn free(&mut self,addr: Addr);
 
+    /// Realloc the given address. Might fail if it is not owned by current allocator.
+    /// @param ptr Old address to reallocate. This must match with an address returned by malloc.
+    /// @param size Define the new size.
+	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr;
+
+    /// Retutn the inner size of the allocated segment (could be larger than requested).
+	fn get_inner_size(&mut self,ptr: Addr) -> Size;
+
+    /// Return the total size of the allocated segment (considering the allocator headers).
+    /// This account the header manager by current level, not adding the macro blocs manager
+    /// in which the allocation is embdeded except for huge allocation which are directly placed
+    /// into a macro bloc.
+	fn get_total_size(&mut self,ptr: Addr) -> Size;
+
+    /// Return the requested size when available otherwise return the actual inner size.
+	fn get_requested_size(&mut self,ptr: Addr) -> Size;
+	
+    /// Make safety checking to help debugging
+    fn hard_checking(&mut self,);
+
+	/// Check if the chunk manager if by itself thread safe, this can avoid to take some locks
+    /// into the upper layer.
+	fn is_thread_safe(&mut self) -> bool;
+
+    /// Registry the given segment as a remote free. It can be handled now or latter
+    /// on call for flush_remote().
+	fn remote_free(&mut self,ptr: Addr);
+
+    /// attach a parent to the current chunk manager if not already done at build time.
+    fn set_parent_chunk_manager(&mut self,parent: * mut ChunkManager);
+
+    /// get the current parent chunk manager if has a hierarchie.
+    /// This is used to support remote free and realloc going from one chunk to another.
+    fn get_parent_chunk_manager(&mut self) -> * mut ChunkManager;
 }
 
 /// Define the interace which need to be followed by a memory allocator.
 pub trait Allocator {
+    /// Allocate a chunk of given size and alignement and with given zero constrain.
+    /// It return a tuple with the given address (0 if fail) and a boolean telling if the
+    /// memoury has already been zeroed.
+    fn malloc(size: Size,align: Size,zero_filled: bool) -> (Addr,bool);
 
+    /// Check if the given chunk manager is the current one
+	fn is_local_chunk_manager(manager: * const ChunkManager) -> bool;
+
+    /// Apply flush operation on pending remote frees registred into the chunk manager
+    fn flush_remote();
 }
 
 /// Define a memory source which is used to allocate, deallocate and resize macro blocs. It also
