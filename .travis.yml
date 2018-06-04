@@ -1,13 +1,13 @@
 language: rust
 
+#for using kcov
+sudo: required
+
 rust:
     - nightly
 
 cache:
     apt: true
-    directories:
-        - target/debug/deps
-        - target/debug/build
 
 addons:
   apt:
