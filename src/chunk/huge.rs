@@ -99,7 +99,7 @@ impl ChunkManager for HugeChunkManager {
 		let addr = PaddedChunk::unpad(addr);
 
 		//TODO make a safe version of this function with checking (if possible)
-		let segment = RegionSegment::get_segment(addr);
+		let segment = RegionSegment::get_from_content_ptr(addr);
 
 		//return it to mm source
 		self.get_mm_source().unmap(segment);
@@ -122,7 +122,7 @@ impl ChunkManager for HugeChunkManager {
 		let ptr = PaddedChunk::unpad(ptr);
 		
 		//get old size
-		let segment = RegionSegment::get_segment(ptr);
+		let segment = RegionSegment::get_from_content_ptr(ptr);
 		//allocAssert(segment != NULL);
 		//TODO assume
 		let old_size = segment.get_inner_size();
@@ -154,7 +154,7 @@ impl ChunkManager for HugeChunkManager {
 		let delta = ptr as i64 - real_ptr as i64;
 		debug_assert!(delta >= 0);
 		
-		let segment = RegionSegment::get_segment(ptr);
+		let segment = RegionSegment::get_from_content_ptr(ptr);
 		segment.get_inner_size() - delta as Size
     }
 
@@ -170,7 +170,7 @@ impl ChunkManager for HugeChunkManager {
 		let delta = ptr as i64 - real_ptr as i64;
 		debug_assert!(delta >= 0);
 		
-		let segment = RegionSegment::get_segment(ptr);
+		let segment = RegionSegment::get_from_content_ptr(ptr);
 		segment.get_total_size() - delta as Size
     }
 
@@ -198,4 +198,29 @@ impl ChunkManager for HugeChunkManager {
     fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager> {
         self.parent
     }
+}
+
+#[cfg(test)]
+mod tests
+{
+	use chunk::huge::*;
+	use registry::registry::RegionRegistry;
+	use mmsource::cached::CachedMMSource;
+	use common::shared::SharedPtrBox;
+
+	#[test]
+	fn basic() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let (ptr,zero) = huge.malloc(4096, BASIC_ALIGN, false);
+		assert_eq!(zero, true);
+		assert!(ptr != 0);
+		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32);
+		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
+		let ptr = huge.realloc(ptr, 4*1024*1024);
+		assert_eq!(huge.get_inner_size(ptr),4*1024*1024+4096-32);
+		assert_eq!(huge.get_total_size(ptr),4*1024*1024+4096);
+		huge.free(ptr);
+	}
 }

@@ -56,8 +56,13 @@ impl RegionSegment {
 		*segment
 	}
 
+	pub fn get_from_content_ptr(ptr: Addr) -> RegionSegment {
+		debug_assert!(ptr != 0);
+		Self::get_segment_from_base_ptr(ptr - mem::size_of::<RegionSegment>())
+	}
+
 	///Return a segment from address.
-	pub fn get_segment(ptr: Addr) -> RegionSegment {
+	pub fn get_segment_from_base_ptr(ptr: Addr) -> RegionSegment {
 		//check
 		debug_assert!(ptr != 0);
 		debug_assert!(ptr % SMALL_PAGE_SIZE == 0);
@@ -211,7 +216,7 @@ mod tests
 	#[test]
 	fn get_segment() {
 		let ptr = osmem::mmap(0,4*4096);
-		let _reg = RegionSegment::get_segment(ptr);
+		let _reg = RegionSegment::get_segment_from_base_ptr(ptr);
 		osmem::munmap(ptr,4*4096);
 	}
 

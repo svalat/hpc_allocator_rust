@@ -118,6 +118,11 @@ impl CachedMMSource {
         }
     }
 
+    /// Same than new but with default values for configuration
+    pub fn new_default(registry:Option<SharedPtrBox<RegionRegistry>>) -> Self {
+        Self::new(registry,MMSRC_MAX_SIZE,MMSRC_THREASHOLD,MMSRC_KEEP_RESIDUT)
+    }
+
     /// Free all the memory stored into the cache.
     pub fn free_all(&mut self) {
         let mut tmp = self.freelist.lock();
