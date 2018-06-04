@@ -25,6 +25,23 @@ looking into `mpcframework/MPC_Allocator`. It can be built outside of MPC.
 This version contain most of the features from the C version (and more), it is not yet tunned but it 
 is easier to read than the C version if you want to understand how it works.
 
+## Build
+
+This project currently rely on nightly version of rust to use the no_std feature and a couple of others.
+
+You can fetch nightly build of rust by using :
+
+```sh
+rustup install nightly
+```
+
+Then building the allocator and running tests :
+
+```sh
+cargo +nigthly build
+cargo +nigthly test
+```
+
 ## Detailed research documentation
 
 If you want more details about the research work behind this allocator you can read my PhD. :
