@@ -1,6 +1,7 @@
 # HPC Allocator Rust
 
 [![Build Status](https://travis-ci.org/svalat/hpc_allocator_rust.svg?branch=master)](https://travis-ci.org/svalat/hpc_allocator_rust)
+[![Coverage Status](https://coveralls.io/repos/github/svalat/hpc_allocator_rust/badge.svg?branch=master)](https://coveralls.io/github/svalat/hpc_allocator_rust?branch=master)
 
 It is a small project to try to push rust in his limit and better understant the low level aspects of the language.
 
