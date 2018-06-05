@@ -104,4 +104,20 @@ mod tests
 
 		osmem::munmap(ptr,4*4096);
 	}
+
+	#[test]
+	fn test_mmap_fixed() {
+		let ptr = osmem::mmap(0, 8*4096);
+		let ptr2 = osmem::mmap(ptr, 4*4096);
+		assert_eq!(ptr, ptr2);
+		osmem::munmap(ptr, 8*4096);
+	}
+
+	#[test]
+	fn test_mremap_fixed() {
+		let ptr = osmem::mmap(0, 8*4096);
+		let ptr2 = osmem::mremap(ptr,4*4096,4*4096,ptr+4*4096);
+		assert_eq!(ptr+4*4096, ptr2);
+		osmem::munmap(ptr2, 4*4096);
+	}
 }

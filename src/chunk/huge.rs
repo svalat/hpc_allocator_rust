@@ -76,7 +76,7 @@ impl HugeChunkManager {
 		
 		//check for padding
 		if res % align != 0 {
-			res = PaddedChunk::new_from_segment(segment,PaddedChunk::calc_padding_for_segment(segment,align,size)).get_addr();
+			res = PaddedChunk::new_from_segment(segment,align,size).get_content_addr();
 		}
 		
 		//final check
@@ -151,11 +151,10 @@ impl ChunkManager for HugeChunkManager {
 		//unpadd
 		let real_ptr = PaddedChunk::unpad(ptr);
 		debug_assert!(real_ptr <= ptr);
-		let delta = ptr as i64 - real_ptr as i64;
-		debug_assert!(delta >= 0);
+		let delta = ptr - real_ptr;
 		
-		let segment = RegionSegment::get_from_content_ptr(ptr);
-		segment.get_inner_size() - delta as Size
+		let segment = RegionSegment::get_from_content_ptr(real_ptr);
+		segment.get_inner_size() - delta
     }
 
 	fn get_total_size(&mut self,ptr: Addr) -> Size {
@@ -166,12 +165,9 @@ impl ChunkManager for HugeChunkManager {
 		
 		//unpadd
 		let real_ptr = PaddedChunk::unpad(ptr);
-		debug_assert!(real_ptr <= ptr);
-		let delta = ptr as i64 - real_ptr as i64;
-		debug_assert!(delta >= 0);
 		
-		let segment = RegionSegment::get_from_content_ptr(ptr);
-		segment.get_total_size() - delta as Size
+		let segment = RegionSegment::get_from_content_ptr(real_ptr);
+		segment.get_total_size()
     }
 
 	fn get_requested_size(&mut self,_ptr: Addr) -> Size {
@@ -213,14 +209,44 @@ mod tests
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
 		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+
 		let (ptr,zero) = huge.malloc(4096, BASIC_ALIGN, false);
 		assert_eq!(zero, true);
 		assert!(ptr != 0);
 		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32);
 		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
+
 		let ptr = huge.realloc(ptr, 4*1024*1024);
 		assert_eq!(huge.get_inner_size(ptr),4*1024*1024+4096-32);
 		assert_eq!(huge.get_total_size(ptr),4*1024*1024+4096);
+
 		huge.free(ptr);
+	}
+
+	#[test]
+	fn min_size() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+
+		let (ptr,zero) = huge.malloc(8, BASIC_ALIGN, false);
+		assert_eq!(zero, true);
+		assert!(ptr != 0);
+		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32);
+		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
+	}
+
+	#[test]
+	fn align() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+
+		let (ptr,zero) = huge.malloc(8, 128, false);
+		assert_eq!(zero, true);
+		assert!(ptr != 0);
+		assert!(ptr % 128 == 0);
+		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32-96);
+		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
 	}
 }

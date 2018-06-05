@@ -25,9 +25,10 @@ pub struct PaddedChunk {
 
 impl PaddedChunk {
 	/// Create a new padded header from RegionSegment.
-	pub fn new_from_segment(seg: RegionSegment, padding: Size) -> SharedPtrBox<Self> {
+	pub fn new_from_segment(seg: RegionSegment, align: Size, requested_size: Size) -> SharedPtrBox<Self> {
 		seg.sanity_check();
-		Self::new_from_ptr(seg.get_root_addr(),padding,seg.get_inner_size())
+		let padding = PaddedChunk::calc_padding_for_segment(seg, align, requested_size);
+		Self::new_from_ptr(seg.get_content_addr(),padding,seg.get_inner_size())
 	}
 
 	/// Create new padded header from address.
@@ -58,7 +59,7 @@ impl PaddedChunk {
 	}
 
 	/// Return the content address.
-	pub fn get_addr(&self) -> Addr {
+	pub fn get_content_addr(&self) -> Addr {
 		(self as * const Self as Addr) + mem::size_of::<Self>()
 	}
 
@@ -68,7 +69,7 @@ impl PaddedChunk {
 		segment.sanity_check();
 		
 		//calc current align
-		let mut delta = segment.get_root_addr() % align;
+		let mut delta = segment.get_content_addr() % align;
 		if delta != 0 {
 			delta = align - delta;
 			debug_assert!(delta >= mem::size_of::<Self>());
@@ -77,6 +78,11 @@ impl PaddedChunk {
 			}
 			/*if (delta < sizeof(PaddedChunk))
 				delta += align;*/
+		}
+
+		//case
+		if delta < mem::size_of::<Self>() {
+			delta += align;
 		}
 		
 		//check size
@@ -90,7 +96,7 @@ impl PaddedChunk {
 	/// Build padding info and pad an address.
 	pub fn pad(ptr:Addr, padding: Size, chunk_size: Size) -> Addr {
 		let header = Self::new_from_ptr(ptr,padding,chunk_size);
-		header.get().get_addr()
+		header.get().get_content_addr()
 	}
 
 	/// Unpad an address which is padded or not.
@@ -118,6 +124,7 @@ mod tests
 {
 	use chunk::padding::PaddedChunk;
 	use portability::osmem;
+	use registry::segment::RegionSegment;
 
 	#[test]
 	fn unpad_1() {
@@ -138,6 +145,21 @@ mod tests
 		
 		let res = PaddedChunk::unpad(pad);
 		assert_eq!(addr,res);
+
+		osmem::munmap(addr,4096);
+	}
+
+	#[test]
+	fn pad_segment() {
+		let addr = osmem::mmap(0,4096);
+		let seg = RegionSegment::new(addr,4096,None);
+		let padded = PaddedChunk::new_from_segment(seg, 64, 1024);
+
+		let pad = padded.get_content_addr();
+		assert_eq!(pad%64,0);
+		
+		let res = PaddedChunk::unpad(pad);
+		assert_eq!(seg.get_content_addr(),res);
 
 		osmem::munmap(addr,4096);
 	}
