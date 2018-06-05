@@ -24,7 +24,7 @@ const CHUNK_ALLOCATED:u32 = 1;
 
 /// To be used to store chunk status (FREE or ALLOCATED)
 type ChunkStatus = u32;
-type MediumChunkPtr = SharedPtrBox<MediumChunk>;
+pub type MediumChunkPtr = SharedPtrBox<MediumChunk>;
 
 /// Define a medium chunk by its header. Medium chunk are chained in memory
 /// such as next and prev chunk are contiguous to current one to be efficiently

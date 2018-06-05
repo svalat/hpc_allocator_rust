@@ -19,7 +19,8 @@ pub const BASIC_ALIGN: Size = mem::size_of::<usize>();
 pub const SMALL_PAGE_SIZE: Size = 4096;
 /// To be stored into magick field of medium chunks
 pub const MAGICK_VALUE: u32 = 42;
-//#define NB_FREE_LIST 50
+/// Max number of free list to handle.
+pub const NB_FREE_LIST: usize = 50;
 /// To return some unsuported value for getting requested size from chunk managers
 pub const UNSUPPORTED: Size = 0;
 //#define ALLOC_MIN_SIZE (2*BASIC_ALIGN)
