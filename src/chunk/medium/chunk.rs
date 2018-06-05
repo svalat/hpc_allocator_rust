@@ -206,7 +206,7 @@ impl MediumChunk {
 		if self.prev.is_null() {
 			None
 		} else {
-			Some(self.next.clone())
+			Some(self.prev.clone())
 		}
 	}
 
@@ -283,15 +283,24 @@ impl MediumChunk {
 		let end = base + self.get_inner_size();
 		ptr >= base && ptr < end
 	}
+
+	pub fn setup_as_listable(&mut self) {
+		let node = unsafe{&mut *(self.get_content_addr() as * mut ListNode)};
+		*node = ListNode::new();
+	}
 }
 
 impl Listable<MediumChunk> for MediumChunk {
 	fn get_list_node<'a>(&'a self) -> &'a ListNode {
-		unsafe{&*(self.get_content_addr() as * const ListNode)}
+		let addr = self.get_content_addr();
+		//debug_assert!(addr % mem::size_of::<ListNode>() == 0);
+		unsafe{&*(addr as * const ListNode)}
 	}
 
 	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode {
-		unsafe{&mut *(self.get_content_addr() as * mut ListNode)}
+		let addr = self.get_content_addr();
+		//debug_assert!(addr % mem::size_of::<ListNode>() == 0);
+		unsafe{&mut *(addr as * mut ListNode)}
 	}
 
 	fn get_from_list_node<'a>(elmt: * const ListNode) -> * const Self {
@@ -307,6 +316,7 @@ impl Listable<MediumChunk> for MediumChunk {
 mod tests
 {
 	use chunk::medium::chunk::*;
+	use portability::osmem;
 	use core::mem;
 
 	#[test]
@@ -314,5 +324,186 @@ mod tests
 		//size
 		assert_eq!(MediumChunk::header_size(), mem::size_of::<MediumChunk>());
 		assert_eq!(MediumChunk::header_size(), 3*mem::size_of::<Size>());
+	}
+
+	#[test]
+	fn setup_size() {
+		let ptr = osmem::mmap(0,4096);
+
+		let chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get();
+
+		assert_eq!(chunk.get_total_size(), 4096 - MediumChunk::header_size());
+		assert_eq!(chunk.get_inner_size(), 4096 - 2* MediumChunk::header_size());
+
+		assert_eq!(chunk.get_next().unwrap().get().get_inner_size(), 0);
+		assert_eq!(chunk.get_prev().is_none(),true);
+
+		assert_eq!(chunk.is_single(), false);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn get_root_addr() {
+		let ptr = osmem::mmap(0,4096);
+		let chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get();
+		assert_eq!(chunk.get_root_addr(), ptr);
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn get_chunk() {
+		let ptr = osmem::mmap(0,4096);
+		let chunk = MediumChunk::setup_size(ptr, 4096);
+		
+		let chunk2 = MediumChunk::get_chunk(chunk.get().get_content_addr());
+		assert_eq!(chunk2.unwrap().get_addr(), ptr);
+
+		let chunk3 = MediumChunk::get_chunk(0);
+		assert_eq!(chunk3.is_none(), true);
+		
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn get_chunk_safe() {
+		let ptr = osmem::mmap(0,4096);
+		let chunk = MediumChunk::setup_size(ptr, 4096);
+		
+		let chunk2 = MediumChunk::get_chunk_safe(chunk.get().get_content_addr());
+		assert_eq!(chunk2.unwrap().get_addr(), ptr);
+
+		let chunk3 = MediumChunk::get_chunk_safe(0);
+		assert_eq!(chunk3.is_none(), true);
+		
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	#[should_panic]
+	fn get_chunk_safe_panic() {
+		let ptr = osmem::mmap(0,4096);
+	
+		let chunk2 = MediumChunk::get_chunk_safe(ptr+MediumChunk::header_size());
+		assert_eq!(chunk2.unwrap().get_addr(), ptr);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn status() {
+		let ptr = osmem::mmap(0,4096);
+
+		let mut chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get_mut();
+
+		assert_eq!(chunk.get_status(), CHUNK_ALLOCATED);
+
+		chunk.set_status(CHUNK_FREE);
+
+		assert_eq!(chunk.get_status(), CHUNK_FREE);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn split_no() {
+		let ptr = osmem::mmap(0,4096);
+
+		let mut chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get_mut();
+
+		let residut = chunk.split(4096 - MediumChunk::header_size());
+
+		assert_eq!(residut.is_none(), true);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn split_ok() {
+		let ptr = osmem::mmap(0,4096);
+
+		let mut chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get_mut();
+
+		let residut_tmp = chunk.split(1024);
+		let residut = residut_tmp.as_ref().unwrap().get();
+
+		residut.check();
+
+		assert_eq!(chunk.get_total_size(), 1024 + MediumChunk::header_size());
+		assert_eq!(chunk.get_inner_size(), 1024);
+
+		assert_eq!(residut.get_total_size(), 4096 - 1024 - 2*MediumChunk::header_size());
+		assert_eq!(residut.get_inner_size(), 4096 - 1024 - 3*MediumChunk::header_size());
+
+		assert_eq!(chunk.get_next().unwrap().get().get_root_addr(), residut.get_root_addr());
+		assert_eq!(chunk.get_prev().is_none(),true);
+
+		assert_eq!(residut.get_next().unwrap().get().get_inner_size(),0);
+		assert_eq!(residut.get_prev().unwrap().get_addr(), chunk.get_root_addr());
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn merge() {
+		let ptr = osmem::mmap(0,4096);
+
+		let mut chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get_mut();
+
+		let mut residut_tmp1 = chunk.split(512);
+		let residut1 = residut_tmp1.as_mut().unwrap().get_mut();
+
+		let mut residut_tmp2 = residut1.split(512);
+		let residut2 = residut_tmp2.as_mut().unwrap().get_mut();
+
+		let residut_tmp3 = residut2.split(512);
+		let residut3 = residut_tmp3.as_ref().unwrap();
+
+		chunk.merge(residut3.clone());
+
+		assert_eq!(chunk.get_total_size(), 4096 - MediumChunk::header_size());
+		assert_eq!(chunk.get_inner_size(), 4096 - 2*MediumChunk::header_size());
+
+		assert_eq!(chunk.get_next().unwrap().get().get_inner_size(), 0);
+		assert_eq!(chunk.get_prev().is_none(),true);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn contain() {
+		let ptr = osmem::mmap(0,4096);
+
+		let chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get();
+
+		assert_eq!(chunk.contain(ptr), false);
+		assert_eq!(chunk.contain(ptr+MediumChunk::header_size()), true);
+		assert_eq!(chunk.contain(ptr+4096-MediumChunk::header_size()-1), true);
+		assert_eq!(chunk.contain(ptr+4096-MediumChunk::header_size()), false);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn list_node() {
+		let ptr = osmem::mmap(0,4096);
+
+		let mut chunk = MediumChunk::setup_size(ptr, 4096);
+		let chunk = chunk.get_mut();
+
+		chunk.setup_as_listable();
+
+		let node = MediumChunk::get_list_node(chunk);
+
+		assert_eq!(node.is_none(),true);
+
+		osmem::munmap(ptr, 4096);
 	}
 }

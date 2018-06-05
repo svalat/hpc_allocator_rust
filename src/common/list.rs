@@ -338,6 +338,7 @@ mod tests
 	use common::list::*;
 	use common::types::*;
 	use portability::osmem;
+	use core::mem;
 
 	struct Fake {
 		node: ListNode,
@@ -376,6 +377,12 @@ mod tests
 		fn get_from_list_node_mut<'a>(elmt: * mut ListNode) -> * mut Fake {
 			unsafe{&mut *(elmt as * mut ListNode as Addr as * mut Fake)}
 		}
+	}
+	#[test]
+	fn size() {
+		//TODO this should ideally be 16
+		//assert_eq!(mem::size_of::<ListNode>(), 16);
+		assert_eq!(mem::size_of::<ListNode>(), 32);
 	}
 
 	#[test]
