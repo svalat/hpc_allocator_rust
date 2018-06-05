@@ -6,9 +6,7 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///Implement all the chunk managers
+//This module implement all the components used to build the medium chunk manager.
 
-pub mod dummy;
-pub mod huge;
-pub mod padding;
-pub mod medium;
+//import
+mod chunk;
