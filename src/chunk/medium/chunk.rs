@@ -42,6 +42,12 @@ pub struct MediumChunk {
 
 //implement
 impl MediumChunk {
+	/// Internal function to setup a MediumChunk in place from a given addres.
+	/// It set it up with no next/prev (so NULL).
+	/// By default the chunk is marked as ALLOCATED.
+	/// 
+	/// As it setup the content in place it return a SharedPtrBox pointer to the
+	/// ptr memory.
 	fn setup(ptr: Addr) -> MediumChunkPtr {
 		//checks
 		debug_assert!(ptr != 0);
@@ -65,6 +71,8 @@ impl MediumChunk {
 		res
 	}
 
+	/// Setup in place a new chunk from a given pointer and a given total size
+	/// It will build the header and return a pointer to it.
 	pub fn setup_size(ptr: Addr, total_size: Size) -> MediumChunkPtr {
 		//errors
 		debug_assert!(total_size >= Self::header_size() + BASIC_ALIGN);
@@ -80,6 +88,8 @@ impl MediumChunk {
 		res
 	}
 
+	/// Setup in place a new chunk header with a given total size and setup
+	/// the prev pointer to the given optional prev parameter.
 	pub fn setup_prev(ptr: Addr, total_size: Size,prev: Option<MediumChunkPtr>) -> MediumChunkPtr {
 		//check
 		debug_assert!(total_size == 0 || total_size >= Self::header_size() + BASIC_ALIGN);
@@ -108,6 +118,7 @@ impl MediumChunk {
 		return res;
 	}
 
+	/// Setup in place a new chunk at the given address with the given prev and next chunks.
 	pub fn setup_prev_next(ptr: Addr,prev: Option<MediumChunkPtr>,next: MediumChunkPtr) -> MediumChunkPtr {
 		//errors
 		debug_assert!(next.get_addr() > ptr || next.is_null());
@@ -130,16 +141,22 @@ impl MediumChunk {
 		return res;
 	}
 
+	/// Return the header size to avoid putting mem::size_of() everywhere.
 	#[inline]
 	fn header_size() -> Size {
 		mem::size_of::<MediumChunk>()
 	}
 
+	/// Return the base address (header address) of the current chunk.
 	#[inline]
 	fn get_root_addr(&self) -> Addr {
 		self as * const Self as Addr
 	}
 
+	/// Return an optional pointer to a chunk from a content pointer. It will 
+	/// decrement the address by the header size and return.
+	/// 
+	/// If ptr is null, then the option is setup to None.
 	#[inline]
 	pub fn get_chunk(ptr: Addr) -> Option<MediumChunkPtr> {
 		if ptr == 0 {
@@ -149,6 +166,12 @@ impl MediumChunk {
 		}
 	}
 
+	/// Return an optional pointer to a chunk from a content pointer. It will 
+	/// decrement the address by the header size and return.
+	/// 
+	/// If ptr is null, then the option is setup to None.
+	/// 
+	/// It will also safe check the extracted chunk in debug mode.
 	#[inline]
 	pub fn get_chunk_safe(ptr: Addr) -> Option<MediumChunkPtr> {
 		if ptr == 0 {
@@ -160,6 +183,7 @@ impl MediumChunk {
 		}
 	}
 
+	/// Get the total size of the chunk (hread + content)
 	#[inline]
 	pub fn get_total_size(&self) -> Size {
 		if self.next.is_null() {
@@ -169,6 +193,7 @@ impl MediumChunk {
 		}
 	}
 
+	/// Return the inner size of the chunk (content size).
 	#[inline]
 	pub fn get_inner_size(&self) -> Size {
 		if self.next.is_null() {
@@ -178,6 +203,10 @@ impl MediumChunk {
 		}
 	}
 
+	/// Check all properties of the chunk with expected constains to check if
+	/// they all match. 
+	/// This use debug_assert!() so it will do nothing in release mode.
+	/// And be inline so in theory has zero cost in release.
 	#[inline]
 	pub fn check(&self) {
 		debug_assert!(self.get_inner_size() >= mem::size_of::<ListNode>());
@@ -192,6 +221,7 @@ impl MediumChunk {
 		}
 	}
 
+	/// Optionally return the pointer to next chunk.
 	#[inline]
 	pub fn get_next(&self) -> Option<MediumChunkPtr> {
 		if self.next.is_null() {
@@ -201,6 +231,7 @@ impl MediumChunk {
 		}
 	}
 
+	/// Optionally return the pointer to previous chunk.
 	#[inline]
 	pub fn get_prev(&self) -> Option<MediumChunkPtr> {
 		if self.prev.is_null() {
@@ -210,18 +241,22 @@ impl MediumChunk {
 		}
 	}
 
+	/// Return allocation status of the chunk.
 	#[inline]
 	pub fn get_status(&self) -> ChunkStatus {
 		debug_assert!(self.status == CHUNK_FREE || self.status == CHUNK_ALLOCATED);
 		self.status
 	}
 
+	/// Change allocation status of the chunk.
 	#[inline]
 	pub fn set_status(&mut self,status: ChunkStatus) {
 		debug_assert!(status == CHUNK_FREE || status == CHUNK_ALLOCATED);
 		self.status = status;
 	}
 
+	/// Split the chunk at the given inner (contant) size.
+	/// If size if too big then return None.
 	pub fn split(&mut self, inner_size: Size) -> Option<MediumChunkPtr> {
 		//round size to multiple of 8
 		let total_size = ops::up_to_power_of_2(inner_size,BASIC_ALIGN) + Self::header_size();
@@ -248,15 +283,21 @@ impl MediumChunk {
 		Some(chunk)
 	}
 
+	/// Check if the chunk is not linked to any other chunks.
+	/// prev/next is NULL in other words.
 	pub fn is_single(&self) -> bool {
 		debug_assert!(self.get_root_addr() != 0);
 		self.prev.is_null() && self.next.is_null()
 	}
 
+	/// Get base address of data content in the chunk (base address + header).
 	pub fn get_content_addr(&self) -> Addr {
 		self.get_root_addr() + Self::header_size()
 	}
 
+	/// Merge all next chunk until the given one.
+	/// It will merge on the current chunk by updating its
+	/// next entry.
 	pub fn merge(&mut self, last: MediumChunkPtr) {
 		//errors
 		self.check();
@@ -278,12 +319,15 @@ impl MediumChunk {
 		first.next = last.next.clone();
 	}
 
+	/// Check if the chunk contain (in the inner content part) the given
+	/// address.
 	pub fn contain(&self, ptr: Addr) -> bool {
 		let base = self.get_content_addr();
 		let end = base + self.get_inner_size();
 		ptr >= base && ptr < end
 	}
 
+	/// Init the content as ListNode to put the chunk into a free list.
 	pub fn setup_as_listable(&mut self) {
 		let node = unsafe{&mut *(self.get_content_addr() as * mut ListNode)};
 		*node = ListNode::new();
