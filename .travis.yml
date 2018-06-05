@@ -6,8 +6,7 @@ sudo: required
 rust:
     - nightly
 
-cache:
-    apt: true
+cache: cargo
 
 addons:
   apt:
@@ -15,15 +14,22 @@ addons:
       - libcurl4-openssl-dev
       - libelf-dev
       - libdw-dev
+      - binutils-dev
+      - cmake # also required for cargo-update
+    sources:
+      - kalakris-cmake
+
+before_script:
+  - export PATH=$HOME/.cargo/bin:$PATH
+  - cargo install cargo-update || echo "cargo-update already installed"
+  - cargo install cargo-travis || echo "cargo-travis already installed"
+  - cargo install-update -a # update outdated cached binaries
 
 script:
-    cargo build -v;
-    cargo test -v;
+  - cargo build -v
+  - cargo test -v
 
-after_success: |
-    [ $TRAVIS_RUST_VERSION = nightly ] &&
-    wget https://github.com/shaneutt/kcov/archive/master.tar.gz &&
-    tar xzf master.tar.gz && mkdir kcov-master/build && cd kcov-master/build && cmake .. && make && make install DESTDIR=../tmp && cd ../.. &&
-    ls target/debug &&
-    ./kcov-master/tmp/usr/local/bin/kcov --coveralls-id=KDi7Rnv9IHVos7gsifOYFAURwDoGaM0vQ --exclude-pattern=/.cargo target/kcov $(ls target/debug/hpc_allocator_rust-* | grep -v '.d$')
+after_success:
+  # measure code coverage and upload to coveralls.io
+  - cargo coveralls
 
