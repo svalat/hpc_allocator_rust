@@ -425,8 +425,20 @@ mod tests
 		osmem::munmap(ptr, 4096);
 	}
 
+	#[cfg(debug_assertions)]
 	#[test]
 	#[should_panic]
+	fn get_chunk_safe_panic() {
+		let ptr = osmem::mmap(0,4096);
+	
+		let chunk2 = MediumChunk::get_chunk_safe(ptr+MediumChunk::header_size());
+		assert_eq!(chunk2.unwrap().get_addr(), ptr);
+
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[cfg(not(debug_assertions))]
+	#[test]
 	fn get_chunk_safe_panic() {
 		let ptr = osmem::mmap(0,4096);
 	

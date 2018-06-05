@@ -112,7 +112,7 @@ impl ChunkManager for HugeChunkManager {
 		if ptr == 0 && size == 0 {
 			return 0;
 		} else if ptr == 0 {
-			return self.malloc(size,1,false).0;
+			return self.malloc(size,BASIC_ALIGN,false).0;
 		} else if size == 0 {
 			self.free(ptr);
 			return 0;
@@ -203,6 +203,7 @@ mod tests
 	use registry::registry::RegionRegistry;
 	use mmsource::cached::CachedMMSource;
 	use common::shared::SharedPtrBox;
+	use chunk::dummy::DummyChunkManager;
 
 	#[test]
 	fn basic() {
@@ -221,6 +222,14 @@ mod tests
 		assert_eq!(huge.get_total_size(ptr),4*1024*1024+4096);
 
 		huge.free(ptr);
+
+		let (ptr, zero) = huge.malloc(0,BASIC_ALIGN,false);
+		assert_eq!(ptr, 0);
+		assert_eq!(zero, false);
+
+		huge.free(0);
+
+		mmsource.free_all();
 	}
 
 	#[test]
@@ -234,6 +243,10 @@ mod tests
 		assert!(ptr != 0);
 		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32);
 		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
+
+		huge.free(ptr);
+
+		mmsource.free_all();
 	}
 
 	#[test]
@@ -246,7 +259,73 @@ mod tests
 		assert_eq!(zero, true);
 		assert!(ptr != 0);
 		assert!(ptr % 128 == 0);
+
 		assert_eq!(huge.get_inner_size(ptr),2*1024*1024-32-96);
 		assert_eq!(huge.get_total_size(ptr),2*1024*1024);
+
+		assert_eq!(huge.get_inner_size(0),0);
+		assert_eq!(huge.get_total_size(0),0);
+
+		assert_eq!(huge.get_requested_size(ptr), UNSUPPORTED);
+
+		huge.free(ptr);
+
+		mmsource.free_all();
+	}
+
+	#[test]
+	fn rebind_mm_source() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+
+		huge.rebind_mm_source(&mut mmsource as * mut MemorySource);
+
+		mmsource.free_all();
+	}
+
+	#[test]
+	fn realloc() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+
+		let ptr = huge.realloc(0,0);
+		assert_eq!(ptr, 0);
+
+		let ptr = huge.realloc(0,1*1024*1024);
+
+		huge.realloc(ptr,0);
+
+		mmsource.free_all();
+	}
+
+	#[test]
+	fn is_thread_safe() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		assert_eq!(huge.is_thread_safe(), true);
+	}
+
+	#[test]
+	#[should_panic]
+	fn remote_free() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		huge.remote_free(0);
+	}
+
+	#[test]
+	fn chunk_manager() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut manager = DummyChunkManager::new();
+
+		huge.set_parent_chunk_manager(Some(&mut manager as * mut ChunkManager));
+
+		assert_eq!(huge.get_parent_chunk_manager().unwrap(), &mut manager as * mut ChunkManager);
 	}
 }
