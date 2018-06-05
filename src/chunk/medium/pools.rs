@@ -19,16 +19,25 @@ use common::consts::*;
 
 /// How to insert chunks
 enum ChunkInsertMode {
+	/// Insert such a way we take it out first
 	FIFO,
+	/// Insert such a way we take it out last
 	LIFO,
 }
 
+/// Define a chunk free list.
 type ChunkFreeList = List<MediumChunk>;
 
+/// Define a medium chunk pool with multiple free list
+/// segregated by size class.
 pub struct MediumFreePool {
+	/// Current number of list in use.
 	nb_list: usize,
+	/// List of size class to attach the lists.
 	sizes: [Size; NB_FREE_LIST],
+	/// status of the list (free of not)
 	status: [bool; NB_FREE_LIST],
+	/// all lists.
 	list: [ChunkFreeList; NB_FREE_LIST],
 }
 
