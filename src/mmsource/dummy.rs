@@ -164,8 +164,10 @@ mod tests
 		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(&mut manager));
 
 		//check registry
-		let seg1_check = registry.get_segment(seg1.get_root_addr());
-		assert!(seg1_check.is_none());
+		if seg1.get_root_addr() != seg1_remap.get_root_addr() {
+			let seg1_check = registry.get_segment(seg1.get_root_addr());
+			assert!(seg1_check.is_none());
+		}
 		let seg1_check = registry.get_segment(seg1_remap.get_root_addr());
 		assert_eq!(seg1_check.unwrap().get_root_addr(),seg1_remap.get_root_addr());
 

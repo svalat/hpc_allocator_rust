@@ -17,7 +17,8 @@ use common::types::{SSize,Size};
 pub const BASIC_ALIGN: Size = mem::size_of::<usize>();
 /// Define the standard page size which is 4k on most systems.
 pub const SMALL_PAGE_SIZE: Size = 4096;
-//#define MAGICK_VALUE 42
+/// To be stored into magick field of medium chunks
+pub const MAGICK_VALUE: u32 = 42;
 //#define NB_FREE_LIST 50
 /// To return some unsuported value for getting requested size from chunk managers
 pub const UNSUPPORTED: Size = 0;
