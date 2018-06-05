@@ -12,6 +12,7 @@
 #![feature(core_intrinsics)]
 #![no_std]
 #![allow(dead_code)]
+#![feature(asm)]
 
 //load modules
 mod common;
