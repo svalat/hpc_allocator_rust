@@ -12,11 +12,12 @@
 /// This is used to implement the MediumChunkManager.
 
 //import
-use chunk::medium::chunk::{MediumChunk,MediumChunkPtr};
+use chunk::medium::chunk::{MediumChunk,MediumChunkPtr, CHUNK_ALLOCATED, CHUNK_FREE};
 use common::types::{Size,Addr};
-use common::list::List;
+use common::list::{List,ListNode};
 use common::consts::*;
 use portability::arch;
+use core::mem;
 
 /// Provide the default list of size to be used to build segregated lists.
 // CAUTION, IF YOU CHANGE THIS YOU NEED TO ADAPT reverse_default_free_sizes() OR
@@ -32,7 +33,7 @@ static FREE_LIST_SIZES: [Size;NB_FREE_LIST] = [16, 24,
 const FAST_REVERSE: bool = true;
 
 /// How to insert chunks
-enum ChunkInsertMode {
+pub enum ChunkInsertMode {
 	/// Insert such a way we take it out first
 	FIFO,
 	/// Insert such a way we take it out last
@@ -41,6 +42,7 @@ enum ChunkInsertMode {
 
 /// Define a chunk free list.
 type ChunkFreeList = List<MediumChunk>;
+type ChunkFreeListId = usize;
 
 /// Define a medium chunk pool with multiple free list
 /// segregated by size class.
@@ -54,7 +56,7 @@ pub struct MediumFreePool {
 	/// status of the list (free of not)
 	status: [bool; NB_FREE_LIST],
 	/// all lists.
-	list: [ChunkFreeList; NB_FREE_LIST],
+	lists: [ChunkFreeList; NB_FREE_LIST],
 }
 
 impl MediumFreePool {
@@ -79,16 +81,44 @@ impl MediumFreePool {
 			sizes: FREE_LIST_SIZES,
 			fast_reverse: FAST_REVERSE,
 			status: [true; NB_FREE_LIST],
-			list: [ChunkFreeList::new(); NB_FREE_LIST],
+			lists: [ChunkFreeList::new(); NB_FREE_LIST],
 		}
 	}
 
 	pub fn insert_addr(&mut self,ptr: Addr, size: Size, mode: ChunkInsertMode) {
-		panic!("TODO");
+		let chunk = MediumChunk::setup_size(ptr,size);
+		self.insert_chunk(chunk,mode);
 	}
 
-	pub fn insert_chunk(&mut self, chunk: MediumChunkPtr, mode: ChunkInsertMode) {
-		panic!("TODO");
+	pub fn insert_chunk(&mut self, mut chunk: MediumChunkPtr, mode: ChunkInsertMode) {
+		//get size
+		chunk.check();
+		let inner_size = chunk.get_inner_size();
+
+		//errors
+		debug_assert!(inner_size >= mem::size_of::<ChunkFreeList>());
+		debug_assert!(chunk.get_total_size() > 0);
+		debug_assert!(chunk.get_status() == CHUNK_ALLOCATED);
+		
+		//get the free list
+		let mut flistid = self.get_free_list(inner_size);
+		
+		let list_class = self.get_list_class(flistid);
+		if flistid != 0 && list_class != Size::max_value() && list_class != inner_size {
+			flistid -= 1;
+		}
+
+		//mark free
+		chunk.set_status(CHUNK_FREE);
+		
+		//insert
+		match mode {
+			ChunkInsertMode::FIFO => self.lists[flistid].push_front(chunk),
+			ChunkInsertMode::LIFO => self.lists[flistid].push_back(chunk),
+		}
+		
+		//mark non empty
+		self.set_empty_status(flistid,true);
 	}
 
 	pub fn remove(&mut self, chunk: MediumChunkPtr) {
@@ -111,31 +141,31 @@ impl MediumFreePool {
 		panic!("TODO");
 	}
 
-	fn get_free_list(&mut self, inner_size: Size) -> &mut ChunkFreeList {
+	fn get_free_list(&mut self, inner_size: Size) -> ChunkFreeListId {
 		panic!("TODO");
 	}
 
-	fn get_free_list_by_dichotomy(&mut self, inner_size: Size) -> &mut ChunkFreeList {
+	fn get_free_list_by_dichotomy(&mut self, inner_size: Size) -> ChunkFreeListId {
 		panic!("TODO");
 	}
 
-	fn get_free_list_by_analytic(&mut self, inner_size: Size) -> &mut ChunkFreeList {
+	fn get_free_list_by_analytic(&mut self, inner_size: Size) -> ChunkFreeListId {
 		panic!("TODO");
 	}
 
-	fn get_list_class(&self, list:&ChunkFreeList) -> Size {
+	fn get_list_class(&self, list:ChunkFreeListId) -> Size {
 		panic!("TODO");
 	}
 
-	fn set_empty_status(&mut self, list:&ChunkFreeList, filled: bool) {
+	fn set_empty_status(&mut self, list:ChunkFreeListId, filled: bool) {
 		panic!("TODO");
 	}
 
-	fn find_adapted_chunk(&mut self, list:&ChunkFreeList, total_size: Size) -> Option<MediumChunkPtr> {
+	fn find_adapted_chunk(&mut self, list:ChunkFreeListId, total_size: Size) -> Option<MediumChunkPtr> {
 		panic!("TODO");
 	}
 
-	fn get_first_next_non_empty_list(&mut self, list:&ChunkFreeList) -> Option<&mut ChunkFreeList> {
+	fn get_first_next_non_empty_list(&mut self, list:&ChunkFreeList) -> Option<ChunkFreeListId> {
 		panic!("TODO");
 	}
 

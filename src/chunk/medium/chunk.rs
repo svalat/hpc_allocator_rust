@@ -17,10 +17,10 @@ use common::ops;
 use core::mem;
 
 /// To be used to annotate chunk as free
-const CHUNK_FREE:u32 = 0;
+pub const CHUNK_FREE:u32 = 0;
 
 /// To be used to annotate chunk as allocated
-const CHUNK_ALLOCATED:u32 = 1;
+pub const CHUNK_ALLOCATED:u32 = 1;
 
 /// To be used to store chunk status (FREE or ALLOCATED)
 type ChunkStatus = u32;
