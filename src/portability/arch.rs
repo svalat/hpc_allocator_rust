@@ -12,8 +12,8 @@ use common::types::Size;
 /// Implement a fast log by using asm direct operation for x86_64
 #[cfg(any(target_arch = "x86" ,target_arch = "x86_64"))]
 pub fn fast_log_2(size: Size) -> Size {
-	let mut res = 0;
-	let mut size = size;
+	let res;
+	let size = size;
 	if size == 0 {
 		return 0;
 	} else {
@@ -47,7 +47,6 @@ pub fn slow_generic_log_2(size: Size) -> Size {
 mod tests
 {
 	use portability::arch;
-	use common::types::Size;
 
 	#[test]
 	fn fast_log_2() {

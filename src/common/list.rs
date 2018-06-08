@@ -152,13 +152,30 @@ impl ListNode {
 	}
 
 	/// Remove the element from the list it belong to.
-	pub fn extract_from_list(&mut self) {
-		//update prev
-		self.prev.as_mut().unwrap().get_mut().next = self.next.clone();
-		self.next.as_mut().unwrap().get_mut().prev = self.prev.clone();
+	pub fn extract_from_list(&mut self) -> Option<SharedPtrBox<ListNode>> {
+		let ret;
+		
+		{
+			//unwrap
+			let prev = self.prev.as_mut().unwrap();
+			let next = self.next.as_mut().unwrap();
+
+			//Extract
+			if prev.get_addr() == next.get_addr() {
+				ret = Some(prev.clone());
+			} else {
+				ret = None;
+			}
+
+			//update prev
+			prev.get_mut().next = Some(next.clone());
+			next.get_mut().prev = Some(prev.clone());
+		}
 
 		//loop
 		self.init_as_loop();
+
+		ret
 	}
 }
 
@@ -260,7 +277,7 @@ impl <T> List<T>
 	}
 
 	/// Used to hard check the elements of the list to detect bugs.
-	pub fn do_hard_checking(&self) {
+	pub fn hard_checking(&self) {
 		if !self.is_empty() {
 			let mut cur = &self.root;
 			loop {
@@ -282,15 +299,21 @@ impl <T> List<T>
 	}
 
 	/// Remove the given element from the list.
-	pub fn remove(&mut self, mut item: SharedPtrBox<T>) {
+	pub fn remove(item: &mut SharedPtrBox<T>) -> Option<SharedPtrBox<Self>> {
 		//get node of new item
 		let tmp = item.get_mut();
 		let elt = tmp.get_list_node_mut();
 
 		//update prev
 		//TODO maybe make debug_assert
-		if !self.is_empty() && !elt.is_none() && !elt.is_loop() {
-			elt.extract_from_list();
+		if !elt.is_none() && !elt.is_loop() {
+			let node = elt.extract_from_list();
+			match node {
+				Some(x) => Some(SharedPtrBox::new_addr(x.get_addr())),
+				None => None,
+			}
+		} else {
+			None
 		}
 	}
 
@@ -532,12 +555,21 @@ mod tests
 		let v3 = Fake::new(10);
 		list.push_back(SharedPtrBox::new_ref(&v3));
 
-		let ret = list.back().unwrap();
-		list.remove(ret);
+		let mut ret = list.back().unwrap();
+		let lst = List::remove(&mut ret);
+		assert_eq!(lst.is_none(), true);
 
 		//loop
 		for (i,v) in list.iter().enumerate() {
 			assert_eq!(v.value, i as i32);
 		}
+
+		let mut ret = list.back().unwrap();
+		let lst = List::remove(&mut ret);
+		assert_eq!(lst.is_none(), true);
+
+		let mut ret = list.back().unwrap();
+		let lst = List::remove(&mut ret);
+		assert_eq!(lst.unwrap().get_ptr(), &list as * const List<Fake>);
 	}
 }

@@ -304,7 +304,7 @@ mod tests
 	fn is_thread_safe() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
 		assert_eq!(huge.is_thread_safe(), true);
 	}
 

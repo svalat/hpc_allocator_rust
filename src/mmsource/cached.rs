@@ -190,7 +190,7 @@ impl CachedMMSource {
 
             //extract from list
             if !best.is_null() {
-                tmp.list.remove(best.clone());
+                List::remove(&mut best);
                 tmp.current_size -= best.get().get_total_size();
             }
         }
