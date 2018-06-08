@@ -60,13 +60,13 @@ pub struct MediumFreePool {
 }
 
 impl MediumFreePool {
-	fn get_nb_list_from_array() -> usize {
+	fn get_nb_list_from_array(list: &[Size; NB_FREE_LIST]) -> usize {
 		//check
 		debug_assert!(FREE_LIST_SIZES.len() <= NB_FREE_LIST);
 
 		//search end
-		for i in 0..FREE_LIST_SIZES.len() {
-			if FREE_LIST_SIZES[i] == Size::max_value() {
+		for i in 0..list.len() {
+			if list[i] == Size::max_value() {
 				return i;
 			}
 		}
@@ -77,9 +77,19 @@ impl MediumFreePool {
 
 	pub fn new() -> Self {
 		Self {
-			nb_list: Self::get_nb_list_from_array(),
+			nb_list: Self::get_nb_list_from_array(&FREE_LIST_SIZES),
 			sizes: FREE_LIST_SIZES,
 			fast_reverse: FAST_REVERSE,
+			status: [true; NB_FREE_LIST],
+			lists: [ChunkFreeList::new(); NB_FREE_LIST],
+		}
+	}
+
+	pub fn new_cust_list(list: &[Size; NB_FREE_LIST]) -> Self {
+		Self {
+			nb_list: Self::get_nb_list_from_array(list),
+			sizes: *list,
+			fast_reverse: false,
 			status: [true; NB_FREE_LIST],
 			lists: [ChunkFreeList::new(); NB_FREE_LIST],
 		}
@@ -434,6 +444,17 @@ impl MediumFreePool {
 #[cfg(test)]
 mod tests
 {
+	use common::consts::*;
+	use common::types::Size;
+
+	//for tests
+	static TEST_SIZE_LIST: [Size; NB_FREE_LIST] = [8,16,32,64,128,1,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value()
+		,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value()];
 
 	#[test]
 	fn lang_requireement() {
