@@ -283,10 +283,10 @@ impl <T> List<T>
 			loop {
 				//check
 				let pcur = cur as * const ListNode;
-				let pnext = cur.next.as_ref().unwrap().get_ptr();
-				let pprev = cur.prev.as_ref().unwrap().get_ptr();
+				let pnext = cur.next.as_ref().unwrap().prev.as_ref().unwrap().get_ptr();
+				let pprev = cur.prev.as_ref().unwrap().next.as_ref().unwrap().get_ptr();
 				assert!(pprev == pcur);
-				assert!(pnext == cur);
+				assert!(pnext == pcur);
 
 				//move
 				cur = &cur.next.as_ref().unwrap().get();
