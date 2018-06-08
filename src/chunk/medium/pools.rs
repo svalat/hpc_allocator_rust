@@ -14,7 +14,7 @@
 //import
 use chunk::medium::chunk::{MediumChunk,MediumChunkPtr, CHUNK_ALLOCATED, CHUNK_FREE};
 use common::types::{Size,Addr};
-use common::list::{List};
+use common::list::{List,ListNode};
 use common::consts::*;
 use portability::arch;
 use core::mem;
@@ -65,14 +65,21 @@ impl MediumFreePool {
 		debug_assert!(FREE_LIST_SIZES.len() <= NB_FREE_LIST);
 
 		//search end
+		let mut size = 0;
 		for i in 0..list.len() {
 			if list[i] == Size::max_value() {
-				return i;
+				size = i;
+				break;
 			}
 		}
 
-		//error
-		panic!("List is empty !");
+		//we keep last Size::Max to store all entries bigger than X
+		//We need also to keep multiple of 2 for dychotomic search.
+		if size % 2 == 0 {
+			size + 2
+		} else {
+			size + 1
+		}
 	}
 
 	pub fn new() -> Self {
@@ -80,7 +87,7 @@ impl MediumFreePool {
 			nb_list: Self::get_nb_list_from_array(&FREE_LIST_SIZES),
 			sizes: FREE_LIST_SIZES,
 			fast_reverse: FAST_REVERSE,
-			status: [true; NB_FREE_LIST],
+			status: [false; NB_FREE_LIST],
 			lists: [ChunkFreeList::new(); NB_FREE_LIST],
 		}
 	}
@@ -90,7 +97,7 @@ impl MediumFreePool {
 			nb_list: Self::get_nb_list_from_array(list),
 			sizes: *list,
 			fast_reverse: false,
-			status: [true; NB_FREE_LIST],
+			status: [false; NB_FREE_LIST],
 			lists: [ChunkFreeList::new(); NB_FREE_LIST],
 		}
 	}
@@ -158,7 +165,7 @@ impl MediumFreePool {
 		let mut res;
 
 		//errors
-		debug_assert!(inner_size > 0);
+		debug_assert!(inner_size > mem::size_of::<ListNode>());
 		
 		//get the minimum valid size
 		let list = self.get_free_list(inner_size);
@@ -343,7 +350,7 @@ impl MediumFreePool {
 				i = seg_size >> 1;//divide by 2
 			}
 		}
-		debug_assert!(base+i >= self.nb_list);
+		debug_assert!(base+i < self.nb_list);
 		
 		return base+i;
 	}
@@ -446,6 +453,9 @@ mod tests
 {
 	use common::consts::*;
 	use common::types::Size;
+	use chunk::medium::chunk::MediumChunk;
+	use chunk::medium::pools::*;
+	use portability::osmem;
 
 	//for tests
 	static TEST_SIZE_LIST: [Size; NB_FREE_LIST] = [8,16,32,64,128,1,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value()
@@ -459,5 +469,300 @@ mod tests
 	#[test]
 	fn lang_requireement() {
 		debug_assert!(4 >> 1 == 2);//required property to quickly divide by 2
+	}
+
+	#[test]
+	fn new() {
+		let _pool = MediumFreePool::new();
+	}
+
+	#[test]
+	fn new_list() {
+		let _pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+	}
+
+	#[test]
+	fn find_chunk_1() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		assert_eq!(pool.find_chunk(64).is_none(), true);
+	}
+
+	#[test]
+	fn find_chunk_3() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let mut c2 = c1.split(64).unwrap();
+		let mut c3 = c2.split(128).unwrap();
+		c3.split(64);
+		
+		//insert
+		pool.insert_chunk(c0.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c3.clone(),ChunkInsertMode::LIFO);
+
+		assert_eq!(c1.get_root_addr(),pool.find_chunk(64).unwrap().get_root_addr());
+		assert_eq!(c0.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn insert_too_small() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		pool.insert_addr(buf,128,ChunkInsertMode::FIFO);
+
+		//chekc
+		assert_eq!(pool.find_chunk(128).is_none(), true);
+		
+		//clear
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn insert_split() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		pool.insert_addr(buf,128,ChunkInsertMode::FIFO);
+
+		//chekc
+		assert_eq!(pool.find_chunk(64).unwrap().get_root_addr(), buf);
+		assert_eq!(pool.find_chunk(64).is_none(), true);
+		
+		//clear
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn insert_lifo() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let mut c2 = c1.split(128).unwrap();
+		c2.split(128);
+		
+		//insert
+		pool.insert_chunk(c0.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+
+		assert_eq!(c0.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c1.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn insert_fifo() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let mut c2 = c1.split(128).unwrap();
+		c2.split(128);
+		
+		//insert
+		pool.insert_chunk(c0.clone(),ChunkInsertMode::FIFO);
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::FIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::FIFO);
+
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c1.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c0.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn insert_to_small_2() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		pool.insert_addr(buf,128,ChunkInsertMode::FIFO);
+
+		//chekc
+		assert_eq!(pool.find_chunk(100).is_none(), true);
+		
+		//clear
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn remove() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let mut c2 = c1.split(128).unwrap();
+		c2.split(128);
+		
+		//insert
+		pool.insert_chunk(c0.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		pool.remove(&mut c1);
+
+		assert_eq!(c0.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(128).unwrap().get_root_addr());
+		assert_eq!(true,pool.find_chunk(128).is_none());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn merge_1() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let c2 = c1.split(128).unwrap();
+		
+		//insert
+		pool.insert_chunk(c0.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		let c = pool.merge(c1);
+
+		assert_eq!(c0.get_root_addr(),c.get_root_addr());
+		assert_eq!(true,pool.find_chunk(128).is_none());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn merge_2() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(128).unwrap();
+		let _c2 = c1.split(128).unwrap();
+		
+		//insert none
+		
+		//merge 		
+		let c = pool.merge(c1.clone());
+
+		assert_eq!(c1.get_root_addr(),c.get_root_addr());
+		assert_eq!(true,pool.find_chunk(128).is_none());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn try_merge_1() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(32).unwrap();
+		let _c2 = c1.split(32).unwrap();
+		
+		//insert
+		//pool.insert_chunk(c0.clone(),ChunkInsertMode::LIFO);
+		//pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		let c = pool.try_merge_for_size(c0,160);
+
+		assert_eq!(c.is_none(),true);
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn try_merge_2() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(64).unwrap();
+		let mut c2 = c1.split(64).unwrap();
+		c2.split(64);
+		
+		//insert
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		let c = pool.try_merge_for_size(c0.clone(),72);
+
+		assert_eq!(c.as_ref().unwrap().get_root_addr(),c0.get_root_addr());
+		assert_eq!(c.as_ref().unwrap().get_inner_size(), 64 * 2 + MediumChunk::header_size());
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(64).unwrap().get_root_addr());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn try_merge_3() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(64).unwrap();
+		let mut c2 = c1.split(64).unwrap();
+		c2.split(64);
+		
+		//insert
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		let c = pool.try_merge_for_size(c0.clone(),3*64);
+
+		assert_eq!(c.as_ref().unwrap().get_root_addr(),c0.get_root_addr());
+		assert_eq!(c.as_ref().unwrap().get_inner_size(), 64 * 3 + 2*MediumChunk::header_size());
+		assert_eq!(true,pool.find_chunk(128).is_none());
+
+		osmem::munmap(buf, 4096);
+	}
+
+	#[test]
+	fn try_merge_4() {
+		let mut pool = MediumFreePool::new_cust_list(&TEST_SIZE_LIST);
+		let buf = osmem::mmap(0,4096);
+
+		//create chunks
+		let mut c0 = MediumChunk::setup_size(buf,1024);
+		let mut c1 = c0.split(64).unwrap();
+		let c2 = c1.split(64).unwrap();
+		//do not split to keep huge
+		//c2.split(64);
+		
+		//insert
+		pool.insert_chunk(c1.clone(),ChunkInsertMode::LIFO);
+		pool.insert_chunk(c2.clone(),ChunkInsertMode::LIFO);
+		
+		let c = pool.try_merge_for_size(c0.clone(),72);
+
+		assert_eq!(c.as_ref().unwrap().get_root_addr(),c0.get_root_addr());
+		assert_eq!(c.as_ref().unwrap().get_inner_size(), 64 * 2 + MediumChunk::header_size());
+		assert_eq!(c2.get_root_addr(),pool.find_chunk(64).unwrap().get_root_addr());
+
+		osmem::munmap(buf, 4096);
 	}
 }

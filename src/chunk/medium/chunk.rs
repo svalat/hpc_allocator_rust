@@ -143,13 +143,13 @@ impl MediumChunk {
 
 	/// Return the header size to avoid putting mem::size_of() everywhere.
 	#[inline]
-	fn header_size() -> Size {
+	pub fn header_size() -> Size {
 		mem::size_of::<MediumChunk>()
 	}
 
 	/// Return the base address (header address) of the current chunk.
 	#[inline]
-	fn get_root_addr(&self) -> Addr {
+	pub fn get_root_addr(&self) -> Addr {
 		self as * const Self as Addr
 	}
 
