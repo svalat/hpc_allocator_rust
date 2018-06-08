@@ -60,6 +60,8 @@ pub struct MediumFreePool {
 }
 
 impl MediumFreePool {
+	/// Compute the size of the list by search the end element containng usize::MAX.
+	/// Also it ensure to have a size number mulitple of 2 to fit with dychotomic algorithm.
 	fn get_nb_list_from_array(list: &[Size; NB_FREE_LIST]) -> usize {
 		//check
 		debug_assert!(FREE_LIST_SIZES.len() <= NB_FREE_LIST);
@@ -82,6 +84,7 @@ impl MediumFreePool {
 		}
 	}
 
+	/// Build a new free pool by using the default free list size classes.
 	pub fn new() -> Self {
 		Self {
 			nb_list: Self::get_nb_list_from_array(&FREE_LIST_SIZES),
@@ -92,6 +95,14 @@ impl MediumFreePool {
 		}
 	}
 
+	/// Build a new free pool by using a custom free list size classes. Notice
+	/// it disable the fast reverse computation to get class from size
+	/// which make fallback to dychotomic approach.
+	/// 
+	/// You should take care about the size of your list which should be
+	/// mulitple of 2. You can fill the end with multiple usize::MAX.
+	///
+	/// Notice you also need at least one usize::MAX element. 
 	pub fn new_cust_list(list: &[Size; NB_FREE_LIST]) -> Self {
 		Self {
 			nb_list: Self::get_nb_list_from_array(list),
@@ -102,11 +113,20 @@ impl MediumFreePool {
 		}
 	}
 
+	/// Insert a new memory segment in the pool.
+	/// 
+	/// @param ptr Define the base address of the segment.
+	/// @param size Define the total size of the segment. Header will be placed in it. so
+	/// it should be big enough.
+	/// @param mode Insert in FIFO or LIFO mode for later reuse.
 	pub fn insert_addr(&mut self,ptr: Addr, size: Size, mode: ChunkInsertMode) {
 		let chunk = MediumChunk::setup_size(ptr,size);
 		self.insert_chunk(chunk,mode);
 	}
 
+	/// Insert a new alloated chunk in the free list. Its state will be changed to free state.
+	/// @param chunk Define the chunk to insert.
+	/// @param mode Define the insertion mode FIFO or LIFO.
 	pub fn insert_chunk(&mut self, mut chunk: MediumChunkPtr, mode: ChunkInsertMode) {
 		//get size
 		chunk.check();
@@ -138,10 +158,13 @@ impl MediumFreePool {
 		self.set_empty_status(flistid,true);
 	}
 
+	/// Return the list ID from a free list address.
 	fn get_list_id(&self, list: * const ChunkFreeList) -> ChunkFreeListId {
 		(list as Addr - & self.lists as * const ChunkFreeList as Addr) / mem::size_of::<ChunkFreeList>()
 	}
 
+	/// Remove a chunk from the free list it belong to.
+	/// If the list become empty it is marked as empty for fast checking.
 	pub fn remove(&mut self, mut chunk: &mut MediumChunkPtr) {
 		//errors
 		debug_assert!(!chunk.is_null());
@@ -160,6 +183,14 @@ impl MediumFreePool {
 		chunk.set_status(CHUNK_ALLOCATED);
 	}
 
+	/// Find a free chunk by searching in available lists.
+	/// 
+	/// It first search in the free list then search in the previous one
+	/// which contain smaller object but can contain one of the good size so require
+	/// looping on all element to find one where it is guarenti on first element of 
+	/// next lists.
+	/// 
+	/// @param inner_size Define the size which must be contained by the chunk.
 	pub fn find_chunk(&mut self, inner_size: Size) -> Option<MediumChunkPtr> {
 		//vars
 		let mut res;
@@ -197,6 +228,8 @@ impl MediumFreePool {
 		}
 	}
 
+	/// Apply merge opertoin on the given chunk. It will merge with all free chunks on the left
+	/// and on the right and return the new chunk it built.
 	pub fn merge(&mut self, chunk: MediumChunkPtr) -> MediumChunkPtr {
 		let mut first = chunk.clone();
 		let mut last = chunk.clone();
@@ -249,6 +282,7 @@ impl MediumFreePool {
 		return first;
 	}
 
+	/// Try to look on merging the right free chunk to form a new chunk of the requested size.
 	pub fn try_merge_for_size(&mut self, mut chunk: MediumChunkPtr, find_inner_size: Size) -> Option<MediumChunkPtr> {
 		//errors
 		debug_assert!(!chunk.is_null());
@@ -307,12 +341,16 @@ impl MediumFreePool {
 		return Some(chunk);
 	}
 
+	/// Do safe tests for debugging.
 	pub fn hard_checking(&self) {
 		for list in self.lists.iter() {
 			list.hard_checking();
 		}
 	}
 
+	/// Return the free list if containing the given size class. It uses dynchotomic or anytic approach
+	/// depending on the setatus of fast_revers. Notice analytic work only for the default
+	/// size class list
 	fn get_free_list(&mut self, inner_size: Size) -> ChunkFreeListId {
 		//errors
 		debug_assert!(self.nb_list > 0);
@@ -325,6 +363,7 @@ impl MediumFreePool {
 		}
 	}
 
+	/// Implement the search of list id in a dynchotomic way.
 	fn get_free_list_by_dichotomy(&mut self, inner_size: Size) -> ChunkFreeListId {
 		//local vars
 		let mut seg_size = self.nb_list;
@@ -355,6 +394,8 @@ impl MediumFreePool {
 		return base+i;
 	}
 
+	/// Make static computation to get the list if by knowing the content of the default
+	/// size class list.
 	fn get_free_list_by_analytic(&mut self, inner_size: Size) -> ChunkFreeListId {
 		//errors
 		debug_assert!( inner_size > 0);
