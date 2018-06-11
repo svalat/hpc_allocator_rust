@@ -10,7 +10,7 @@
 /// to its memory source which handle the caching.
 
 //import
-use common::traits::{ChunkManager,MemorySource};
+use common::traits::{ChunkManager,ChunkManagerPtr,MemorySourcePtr,MemorySource};
 use common::types::{Addr,Size,SSize};
 use common::consts::*;
 use registry::segment::RegionSegment;
@@ -20,20 +20,20 @@ use common::shared::SharedPtrBox;
 //decl
 pub struct HugeChunkManager {
 	/// Keep track of the parent chunk manager
-	parent: Option<SharedPtrBox<ChunkManager>>,
-	mmsource: SharedPtrBox<MemorySource>,
+	parent: Option<ChunkManagerPtr>,
+	mmsource: MemorySourcePtr,
 }
 
 //impl
 impl HugeChunkManager {
-	pub fn new(mmsource: SharedPtrBox<MemorySource>) -> HugeChunkManager {
+	pub fn new(mmsource: MemorySourcePtr) -> HugeChunkManager {
 		HugeChunkManager {
 			parent:None,
 			mmsource: mmsource,
 		}
 	}
 
-	pub fn rebind_mm_source(&mut self,mmsource: SharedPtrBox<MemorySource>) {
+	pub fn rebind_mm_source(&mut self,mmsource: MemorySourcePtr) {
 		self.mmsource = mmsource;
 	}
 
@@ -62,7 +62,7 @@ impl HugeChunkManager {
 		}
 		
 		//request memory to mm source
-		let manager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(self);
+		let manager: ChunkManagerPtr = SharedPtrBox::new_ref_mut(self);
 		let (segment,z) = self.get_mm_source().map(checked_size,zero,Some(manager));
 		//allocCondWarning(segment != NULL,"Caution, get OOM in huge allocation method.");
 		
@@ -135,7 +135,7 @@ impl ChunkManager for HugeChunkManager {
 		}
 		
 		//remap
-		let manager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(self);
+		let manager: ChunkManagerPtr = SharedPtrBox::new_ref_mut(self);
 		let new_segment = self.get_mm_source().remap(segment,size,Some(manager));
 		//allocCondWarning(newSegment != NULL,"Get OOM in realloc of huge segment.");
 		debug_assert!(new_segment.get_inner_size() >= size);
@@ -188,11 +188,11 @@ impl ChunkManager for HugeChunkManager {
         panic!("Should not be used as HugeChunkManager is thread safe !");
     }
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>) {
+    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
         self.parent = parent;
     }
 
-    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
+    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
         self.parent.clone()
     }
 }

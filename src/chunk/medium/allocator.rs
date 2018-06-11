@@ -13,7 +13,7 @@
 use chunk::medium::pools::{ChunkInsertMode,MediumFreePool};
 use chunk::medium::chunk::*;
 use portability::spinlock::SpinLock;
-use common::traits::{ChunkManager,MemorySource};
+use common::traits::{ChunkManager,ChunkManagerPtr,MemorySourcePtr};
 use registry::registry::RegionRegistry;
 use common::types::{Addr,Size,SSize};
 use common::consts::*;
@@ -26,7 +26,7 @@ use portability::libc;
 
 struct MediumAllocatorLocked {
 	pools: MediumFreePool,
-	mmsource: Option<SharedPtrBox<MemorySource>>,
+	mmsource: Option<MemorySourcePtr>,
 }
 
 /// Implement the medium chunk allocator based on MediumFreePool
@@ -34,12 +34,12 @@ struct MediumAllocator {
 	locked: SpinLock<MediumAllocatorLocked>,
 	registry: Option<SharedPtrBox<RegionRegistry>>,
 	use_lock: bool,
-	parent: Option<SharedPtrBox<ChunkManager>>,
+	parent: Option<ChunkManagerPtr>,
 }
 
 //implement
 impl MediumAllocator {
-	pub fn new(use_lock: bool, mmsource: Option<SharedPtrBox<MemorySource>>) -> Self {
+	pub fn new(use_lock: bool, mmsource: Option<MemorySourcePtr>) -> Self {
 		Self {
 			locked: SpinLock::new(MediumAllocatorLocked {
 				pools: MediumFreePool::new(),
@@ -121,11 +121,11 @@ impl MediumAllocator {
 		return (res,zero);
 	}
 
-	pub fn rebind_mm_source(&mut self,mmsource: Option<SharedPtrBox<MemorySource>>) {
+	pub fn rebind_mm_source(&mut self,mmsource: Option<MemorySourcePtr>) {
 		self.locked.lock().mmsource = mmsource;
 	}
 
-	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: SharedPtrBox<ChunkManager>) -> (Option<MediumChunkPtr>, bool) {
+	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: ChunkManagerPtr) -> (Option<MediumChunkPtr>, bool) {
 		//errors
 		debug_assert!(size > 0);
 		
@@ -359,11 +359,11 @@ impl ChunkManager for MediumAllocator {
 		}
 	}
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>) {
+    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
 		self.parent = parent;
 	}
 
-    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
+    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
 		self.parent.clone()
 	}
 }

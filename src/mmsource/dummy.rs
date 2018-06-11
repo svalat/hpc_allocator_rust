@@ -10,7 +10,7 @@
 ///the requests to the OS without doing any caching.
 
 use common::types::Size;
-use common::traits::{MemorySource,ChunkManager};
+use common::traits::{MemorySource,ChunkManagerPtr};
 use common::consts::*;
 use common::ops;
 use portability::osmem;
@@ -49,7 +49,7 @@ impl DummyMMSource {
 
 /// Implement the memory source trait to be use inside chunk managers and allocators.
 impl MemorySource for DummyMMSource {
-	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<SharedPtrBox<ChunkManager>>) -> (RegionSegmentPtr, bool)
+	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<ChunkManagerPtr>) -> (RegionSegmentPtr, bool)
 	{
 		//errors
 		debug_assert!(inner_size > 0);
@@ -86,7 +86,7 @@ impl MemorySource for DummyMMSource {
 		(res,true)
 	}
 
-	fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr
+	fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<ChunkManagerPtr>) -> RegionSegmentPtr
 	{
 		//errors
 		old_segment.sanity_check();

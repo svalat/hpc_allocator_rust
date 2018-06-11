@@ -153,7 +153,7 @@ mod tests
 		let region = unsafe{&mut *region};
 
 		let mut manager = DummyChunkManager::new();
-		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = ChunkManagerPtr::new_ref_mut(&mut manager);
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));
@@ -173,7 +173,7 @@ mod tests
 		let region = unsafe{&mut *region};
 
 		let mut manager = DummyChunkManager::new();
-		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = ChunkManagerPtr::new_ref_mut(&mut manager);
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));

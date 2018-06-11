@@ -16,7 +16,7 @@
 //import
 use common::consts::*;
 use common::types::*;
-use common::traits::ChunkManager;
+use common::traits::ChunkManagerPtr;
 use common::ops;
 use registry::segment::{RegionSegment,RegionSegmentPtr};
 use registry::region::Region;
@@ -47,7 +47,7 @@ impl RegionRegistry {
 	/// @param ptr Address to use and where to store the segment header.
 	/// @param total_size Define the total size of the segment (accounting the RegionSegment header).
 	/// @param manager Optional pointer to a manager to register to the RegionRegistry.
-	pub fn set_entry( &mut self, ptr: Addr ,total_size: Size,manager: SharedPtrBox<ChunkManager>) -> RegionSegmentPtr {
+	pub fn set_entry( &mut self, ptr: Addr ,total_size: Size,manager: ChunkManagerPtr) -> RegionSegmentPtr {
 		//errors
 		debug_assert!(ptr != 0);
 		debug_assert!(total_size >= REGION_SPLITTING);
@@ -332,12 +332,13 @@ mod tests
 	use registry::registry::*;
 	use portability::osmem;
 	use chunk::dummy::DummyChunkManager;
+	use common::traits::ChunkManagerPtr;
 
 	#[test]
 	fn full_workflow_one_segment() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = ChunkManagerPtr::new_ref_mut(&mut manager);
 
 		//setup segment
 		let size = 3*1024*1024;
@@ -378,7 +379,7 @@ mod tests
 	fn full_workflow_overlap_left_before() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = ChunkManagerPtr::new_ref_mut(&mut manager);
 
 		//setup segment 1
 		let size = 5*1024*1024;
@@ -426,7 +427,7 @@ mod tests
 	fn full_workflow_overlap_left_after() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = SharedPtrBox::new_ref_mut(&mut manager);
 
 		//setup segment 1
 		let size = 5*1024*1024;

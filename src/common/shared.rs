@@ -204,7 +204,7 @@ mod tests
 	use portability::spinlock::*;
 	use chunk::dummy::DummyChunkManager;
 	use core::mem;
-	use common::traits::ChunkManager;
+	use common::traits::{ChunkManager,ChunkManagerPtr};
 
 	#[test]
 	fn basic_1_ref() {
@@ -288,6 +288,6 @@ mod tests
 		let a = DummyChunkManager::new();
 		let mut p = SharedPtrBox::new_ref(&a);
 		p.get_mut().free(0);
-		assert_eq!(mem::size_of::<SharedPtrBox<ChunkManager>>(), 16);
+		assert_eq!(mem::size_of::<ChunkManagerPtr>(), 16);
 	}
  }

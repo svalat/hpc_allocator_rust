@@ -15,7 +15,7 @@ use common::consts::*;
 use common::types::{Addr,Size};
 use common::list::{List,ListNode,Listable};
 use common::shared::SharedPtrBox;
-use common::traits::{ChunkManager,MemorySource};
+use common::traits::{ChunkManagerPtr,MemorySource};
 use common::ops;
 use registry::registry::RegionRegistry;
 use registry::segment::{RegionSegment,RegionSegmentPtr};
@@ -149,7 +149,7 @@ impl CachedMMSource {
     ///
     /// @param total_size Define the size we want accouting headers.
     /// @param manager Define the chunk manager to attach to the segment
-    fn search_in_cache(&mut self,total_size:Size, manager: Option<SharedPtrBox<ChunkManager>>) -> Option<RegionSegmentPtr> {
+    fn search_in_cache(&mut self,total_size:Size, manager: Option<ChunkManagerPtr>) -> Option<RegionSegmentPtr> {
         //errors
         debug_assert!(total_size >= REGION_SPLITTING);
         debug_assert!(total_size <= self.threashold);
@@ -251,7 +251,7 @@ impl CachedMMSource {
 }
 
 impl MemorySource for CachedMMSource {
-    fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<SharedPtrBox<ChunkManager>>) -> (RegionSegmentPtr, bool) {
+    fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<ChunkManagerPtr>) -> (RegionSegmentPtr, bool) {
         //errors
         debug_assert!(inner_size > 0);
         
@@ -298,7 +298,7 @@ impl MemorySource for CachedMMSource {
         return (res.unwrap(),zero);
     }
     
-    fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr {
+    fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<ChunkManagerPtr>) -> RegionSegmentPtr {
         //errors
         old_segment.sanity_check();
         

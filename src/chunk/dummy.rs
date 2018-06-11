@@ -12,9 +12,8 @@
 ///waiting into the memory source.
 
 //import
-use common::traits::ChunkManager;
+use common::traits::{ChunkManager,ChunkManagerPtr};
 use common::types::{Addr,Size};
-use common::shared::SharedPtrBox;
 
 //decl
 pub struct DummyChunkManager;
@@ -59,11 +58,11 @@ impl ChunkManager for DummyChunkManager {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn set_parent_chunk_manager(&mut self,_parent: Option<SharedPtrBox<ChunkManager>>) {
+    fn set_parent_chunk_manager(&mut self,_parent: Option<ChunkManagerPtr>) {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
+    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
         panic!("This is fake implementation, should not be called !");
     }
 }
