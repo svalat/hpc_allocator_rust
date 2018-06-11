@@ -24,6 +24,7 @@ use core::mem;
 use registry::segment::RegionSegment;
 use portability::libc;
 
+/// Group content to protect by spinlock
 struct MediumChunkManagerLocked {
 	pools: MediumFreePool,
 	mmsource: Option<MemorySourcePtr>,
@@ -39,6 +40,11 @@ struct MediumChunkManager {
 
 //implement
 impl MediumChunkManager {
+	/// Construct a new chunk manager.
+	/// 
+	/// @param use_lock Define if we use spinlocks to protect the shared state or not.
+	/// This make the code more efficient if used inside thread local alloctor.
+	/// @param mmsource Define the memory source to use to fetch macro blocs.
 	pub fn new(use_lock: bool, mmsource: Option<MemorySourcePtr>) -> Self {
 		Self {
 			locked: SpinLock::new(MediumChunkManagerLocked {
@@ -51,6 +57,7 @@ impl MediumChunkManager {
 		}
 	}
 
+	/// Allocate a new segment.
 	pub fn malloc(&mut self, size: Size, align:Size, zero_filled: bool) -> (Addr,bool) {
 		let mut zero = zero_filled;
 		let mut checked_size = size;
@@ -106,7 +113,7 @@ impl MediumChunkManager {
 		
 		//ok this is good get ptr
 		let chunk = chunk.unwrap();
-		let mut res = chunk.get_addr();
+		let mut res = chunk.get_content_addr();
 		
 		//check for padding
 		if res % align != 0 {
@@ -115,7 +122,9 @@ impl MediumChunkManager {
 		
 		//final check
 		debug_assert!(res % align == 0);
-		debug_assert!(res != 0 && chunk.contain(res) && chunk.contain(res + size - 1));
+		debug_assert!(res != 0);
+		debug_assert!(chunk.contain(res));
+		debug_assert!(chunk.contain(res + size - 1));
 		
 		//return
 		return (res,zero);
@@ -170,6 +179,32 @@ impl MediumChunkManager {
 		
 		//resize
 		return chunk.split(inner_size);
+	}
+
+	pub fn fill(&mut self,addr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>) {
+		//errors
+		debug_assert!(addr != NULL);
+		debug_assert!(size > 0);
+		
+		//trivial
+		if addr == NULL || size == 0 {
+			return;
+		}
+		
+		//if need register, create macro bloc
+		let chunk;
+		match registry {
+			Some(mut registry) => {
+				let segment = registry.set_entry(addr,size,ChunkManagerPtr::new_ref_mut(self));
+				chunk = MediumChunk::setup_size(segment.get_content_addr(),segment.get_inner_size());
+			},
+			None => {
+				chunk = MediumChunk::setup_size(addr,size);
+			},
+		}
+		
+		//put in free list
+		self.locked.optional_lock(self.use_lock).pools.insert_chunk(chunk,ChunkInsertMode::FIFO);
 	}
 }
 
@@ -365,5 +400,262 @@ impl ChunkManager for MediumChunkManager {
 
     fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
 		self.parent.clone()
+	}
+}
+
+#[cfg(test)]
+mod tests
+{
+	use chunk::medium::manager::*;
+	use mmsource::dummy::DummyMMSource;
+	use registry::registry::RegionRegistry;
+	use portability::osmem;
+
+	#[test]
+	fn build() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = DummyMMSource::new(Some(&mut registry));
+		let mut _manager = MediumChunkManager::new(false, Some(MemorySourcePtr::new_ptr_mut(&mut mmsource)));
+	}
+
+	#[test]
+	fn fill() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn fill_register() {
+		let mut registry = RegionRegistry::new();
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,Some(SharedPtrBox::new_ref_mut(&mut registry)));
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>() + mem::size_of::<RegionSegment>());
+		assert_eq!(zero, false);
+
+		assert_eq!(ptr,registry.get_segment(res).unwrap().get().get_root_addr());
+		//assert!(pmanager == registry.get_segment(res).unwrap().get_manager().unwrap());
+		registry.get_segment(res).unwrap().get_manager().unwrap().free(res);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn malloc() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>() * 2 + 64);
+		assert_eq!(zero, false);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn free() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		manager.free(res);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_basic_1() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(128,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		let res = manager.realloc(res,64);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(manager.get_inner_size(res), 128);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_basic_2() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, NULL);
+		assert_eq!(zero, false);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		let res = manager.realloc(res,128);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(manager.get_inner_size(res), 128);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_basic_move() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		manager.malloc(64,BASIC_ALIGN,false);
+
+		let (res2,_) = manager.malloc(128,BASIC_ALIGN,false);
+		manager.free(res2);
+		
+		let res = manager.realloc(res,128);
+		assert_eq!(res, res2);
+		assert_eq!(manager.get_inner_size(res), 128);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_free() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		let res2 = manager.realloc(res,0);
+		assert_eq!(res2, NULL);
+
+		let (res,zero) = manager.malloc(64,BASIC_ALIGN,false);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+		assert_eq!(zero, false);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_malloc() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let res = manager.realloc(NULL,64);
+		assert_eq!(res, ptr + mem::size_of::<MediumChunk>());
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_not_enougth() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,_) = manager.malloc(64,BASIC_ALIGN,false);
+		let res = manager.realloc(res,4*1024*1024);
+		assert_eq!(res, NULL);
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn realloc_copy() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,_) = manager.malloc(64,BASIC_ALIGN,false);
+		manager.malloc(64,BASIC_ALIGN,false);
+
+		let p = res as * mut u8;
+		for i in 0..64 {
+			unsafe{p.offset(i).write(i as u8)};
+		}
+
+		let res = manager.realloc(res,128);
+		
+		let p = res as * const u8;
+		for i in 0..64 {
+			assert_eq!(unsafe{p.offset(i).read()},i as u8);
+		}
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn get_size() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,_) = manager.malloc(64,BASIC_ALIGN,false);
+		
+		assert_eq!(manager.get_inner_size(res),64);
+		assert_eq!(manager.get_total_size(res),64+mem::size_of::<MediumChunk>());
+		assert_eq!(manager.get_requested_size(res),UNSUPPORTED);
 	}
 }
