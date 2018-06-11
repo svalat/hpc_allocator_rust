@@ -147,12 +147,12 @@ mod tests
 		let mut mmsource = DummyMMSource::new(Some(&mut registry));
 
 		//map
-		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
+		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(ChunkManagerPtr::new_ref_mut(&mut manager)));
 		assert!(seg1.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed,true);
 
 		//a secod to force mremap to move
-		let (seg2,zeroed2) = mmsource.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
+		let (seg2,zeroed2) = mmsource.map(2*1024*1024,true,Some(ChunkManagerPtr::new_ref_mut(&mut manager)));
 		assert!(seg2.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed2,true);
 
@@ -162,7 +162,7 @@ mod tests
 
 		//remap
 		let addr = seg1.get_root_addr();
-		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(SharedPtrBox::new_ref_mut(&mut manager)));
+		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(ChunkManagerPtr::new_ref_mut(&mut manager)));
 
 		//check registry
 		if addr != seg1_remap.get_root_addr() {

@@ -426,7 +426,7 @@ mod tests
 	fn full_workflow_overlap_left_after() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager: ChunkManagerPtr = SharedPtrBox::new_ref_mut(&mut manager);
+		let pmanager: ChunkManagerPtr = ChunkManagerPtr::new_ref_mut(&mut manager);
 
 		//setup segment 1
 		let size = 5*1024*1024;

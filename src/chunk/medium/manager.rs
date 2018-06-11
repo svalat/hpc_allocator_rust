@@ -24,24 +24,24 @@ use core::mem;
 use registry::segment::RegionSegment;
 use portability::libc;
 
-struct MediumAllocatorLocked {
+struct MediumChunkManagerLocked {
 	pools: MediumFreePool,
 	mmsource: Option<MemorySourcePtr>,
 }
 
 /// Implement the medium chunk allocator based on MediumFreePool
-struct MediumAllocator {
-	locked: SpinLock<MediumAllocatorLocked>,
+struct MediumChunkManager {
+	locked: SpinLock<MediumChunkManagerLocked>,
 	registry: Option<SharedPtrBox<RegionRegistry>>,
 	use_lock: bool,
 	parent: Option<ChunkManagerPtr>,
 }
 
 //implement
-impl MediumAllocator {
+impl MediumChunkManager {
 	pub fn new(use_lock: bool, mmsource: Option<MemorySourcePtr>) -> Self {
 		Self {
-			locked: SpinLock::new(MediumAllocatorLocked {
+			locked: SpinLock::new(MediumChunkManagerLocked {
 				pools: MediumFreePool::new(),
 				mmsource: mmsource, 
 			}),
@@ -125,7 +125,7 @@ impl MediumAllocator {
 		self.locked.lock().mmsource = mmsource;
 	}
 
-	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: ChunkManagerPtr) -> (Option<MediumChunkPtr>, bool) {
+	fn refill(locked: &mut MediumChunkManagerLocked, size: Size, zero_filled: bool, manager: ChunkManagerPtr) -> (Option<MediumChunkPtr>, bool) {
 		//errors
 		debug_assert!(size > 0);
 		
@@ -173,7 +173,7 @@ impl MediumAllocator {
 	}
 }
 
-impl ChunkManager for MediumAllocator {
+impl ChunkManager for MediumChunkManager {
 	fn free(&mut self,addr: Addr) {
 		//trivial
 		if addr == 0 {
