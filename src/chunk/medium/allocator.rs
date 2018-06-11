@@ -11,7 +11,7 @@
 
 //import
 use chunk::medium::pools::{ChunkInsertMode,MediumFreePool};
-use chunk::medium::chunk::{MediumChunkPtr};
+use chunk::medium::chunk::{MediumChunk,MediumChunkPtr};
 use portability::spinlock::SpinLock;
 use common::traits::{ChunkManager,MemorySource};
 use registry::registry::RegionRegistry;
@@ -20,6 +20,7 @@ use common::consts::*;
 use common::ops;
 use chunk::padding::PaddedChunk;
 use common::shared::SharedPtrBox;
+use core::mem;
 
 struct MediumAllocatorLocked {
 	pools: MediumFreePool,
@@ -118,7 +119,7 @@ impl MediumAllocator {
 
 	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: SharedPtrBox<ChunkManager>) -> (Option<MediumChunkPtr>, bool) {
 		//errors
-		/*debug_assert!(size > 0);
+		debug_assert!(size > 0);
 		
 		//trivial
 		let mmsource;
@@ -128,7 +129,7 @@ impl MediumAllocator {
 		}
 		
 		//request mem
-		let (segment, zero) =  unsafe{*mmsource}.map(size,zero_filled,Some(manager));
+		let (segment, zero) = mmsource.map(size,zero_filled,Some(manager));
 		debug_assert!(segment.get_inner_size() >= size);
 		
 		//get inner segment
@@ -139,12 +140,28 @@ impl MediumAllocator {
 		let chunk = MediumChunk::setup_size(addr,inner_size);
 		
 		//ok return it
-		return (Some(chunk),zero);*/
-		panic!("tmp");
+		return (Some(chunk),zero);
 	}
 
-	fn split(chunk: MediumChunkPtr, inner_size: Size) -> Option<MediumChunkPtr> {
-		panic!("TODO");
+	fn split(mut chunk: MediumChunkPtr, inner_size: Size) -> Option<MediumChunkPtr> {
+		//trivial
+		if chunk.is_null() {
+			return None;
+		}
+		
+		//align request size
+		let inner_size = ops::up_to_power_of_2(inner_size,MEDIUM_MIN_INNER_SIZE);
+		
+		//get avail size
+		let avail_size = chunk.get_inner_size();
+		
+		//check minimal size
+		if avail_size - inner_size <= MEDIUM_MIN_INNER_SIZE + mem::size_of::<MediumChunk>() {
+			return None;
+		}
+		
+		//resize
+		return chunk.split(inner_size);
 	}
 }
 
