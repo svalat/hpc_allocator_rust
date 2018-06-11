@@ -14,6 +14,7 @@
 //import
 use common::traits::ChunkManager;
 use common::types::{Addr,Size};
+use common::shared::SharedPtrBox;
 
 //decl
 pub struct DummyChunkManager;
@@ -28,7 +29,7 @@ impl DummyChunkManager {
 //impl trait
 impl ChunkManager for DummyChunkManager {
 	fn free(&mut self,_addr: Addr) {
-        panic!("This is fake implementation, should not be called !");
+       //panic!("This is fake implementation, should not be called !");
     }
 
 	fn realloc(&mut self,_ptr: Addr,_size:Size) -> Addr {
@@ -58,11 +59,11 @@ impl ChunkManager for DummyChunkManager {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn set_parent_chunk_manager(&mut self,_parent: Option<* mut ChunkManager>) {
+    fn set_parent_chunk_manager(&mut self,_parent: Option<SharedPtrBox<ChunkManager>>) {
         panic!("This is fake implementation, should not be called !");
     }
 
-    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager> {
+    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
         panic!("This is fake implementation, should not be called !");
     }
 }

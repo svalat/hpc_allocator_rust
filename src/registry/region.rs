@@ -16,8 +16,8 @@
 use common::consts::*;
 use registry::segment::{RegionSegmentPtr};
 use common::types::{Addr,Size};
-use core::ptr;
 use portability::osmem;
+use common::shared::SharedPtrBox;
 
 ///Define a region which is mainly an array of entries and some basic operation.
 pub struct Region
@@ -53,7 +53,7 @@ impl Region {
 	///explicitly clear the pointers. Not needed if originaly allocated by mmap.
 	pub fn clear(self: &mut Self) {
 		for i in 0..REGION_ENTRIES {
-			self.entries[i] = ptr::null();
+			self.entries[i].set_null();
 		}
 	}
 
@@ -72,16 +72,16 @@ impl Region {
 
 	///unmap all the registred regions (more for unit tests)
 	pub fn unmap_registered_memory(self: &mut Self) {
-		let mut last: RegionSegmentPtr = ptr::null();
+		let mut last = SharedPtrBox::new_null();
 
 		//loop on all segments to free them
 		for i in 0..REGION_ENTRIES {
-			if self.entries[i] != ptr::null() && self.entries[i] != last {
-				let entry = unsafe{&*self.entries[i]};
+			if !self.entries[i].is_null() && self.entries[i] != last {
+				let entry = self.entries[i].clone();
 				osmem::munmap(entry.get_root_addr(),entry.get_total_size());
 			}
-			last = self.entries[i];
-			self.entries[i] = ptr::null();
+			last = self.entries[i].clone();
+			self.entries[i].set_null();
 		}
 	}
 
@@ -101,14 +101,14 @@ impl Region {
 	#[inline]
 	pub fn unset(self: &mut Self,id:Size) {
 		debug_assert!(id < REGION_ENTRIES);
-		self.entries[id] = ptr::null();
+		self.entries[id].set_null();
 	}
 
 	///return the requested entry in the region.
 	#[inline]
 	pub fn get(self: &Self,id:Size) -> RegionSegmentPtr {
 		debug_assert!(id < REGION_ENTRIES);
-		self.entries[id]
+		self.entries[id].clone()
 	}
 }
 
@@ -153,13 +153,13 @@ mod tests
 		let region = unsafe{&mut *region};
 
 		let mut manager = DummyChunkManager::new();
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));
 		
 		assert_eq!(region.is_empty(),true);
-		region.set(10,&seg as RegionSegmentPtr);
+		region.set(10,SharedPtrBox::new_ref(&seg));
 		assert_eq!(region.is_empty(),false);
 		
 		osmem::munmap(ptr,1024*4096);
@@ -173,12 +173,12 @@ mod tests
 		let region = unsafe{&mut *region};
 
 		let mut manager = DummyChunkManager::new();
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 
 		let ptr2 = osmem::mmap(0,1024*4096);
 		let seg = RegionSegment::new(ptr2,1024*4096,Some(pmanager));
-		region.set(10,&seg as RegionSegmentPtr);
-		region.set(11,&seg as RegionSegmentPtr);
+		region.set(10,SharedPtrBox::new_ref(&seg));
+		region.set(11,SharedPtrBox::new_ref(&seg));
 
 		region.unmap_registered_memory();
 

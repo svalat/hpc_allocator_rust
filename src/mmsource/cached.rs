@@ -18,7 +18,7 @@ use common::shared::SharedPtrBox;
 use common::traits::{ChunkManager,MemorySource};
 use common::ops;
 use registry::registry::RegionRegistry;
-use registry::segment::RegionSegment;
+use registry::segment::{RegionSegment,RegionSegmentPtr};
 use portability::spinlock::SpinLock;
 use portability::osmem;
 use core::mem;
@@ -149,7 +149,7 @@ impl CachedMMSource {
     ///
     /// @param total_size Define the size we want accouting headers.
     /// @param manager Define the chunk manager to attach to the segment
-    fn search_in_cache(&mut self,total_size:Size, manager: Option<* mut ChunkManager>) -> Option<RegionSegment> {
+    fn search_in_cache(&mut self,total_size:Size, manager: Option<SharedPtrBox<ChunkManager>>) -> Option<RegionSegmentPtr> {
         //errors
         debug_assert!(total_size >= REGION_SPLITTING);
         debug_assert!(total_size <= self.threashold);
@@ -251,7 +251,7 @@ impl CachedMMSource {
 }
 
 impl MemorySource for CachedMMSource {
-    fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<* mut ChunkManager>) -> (RegionSegment, bool) {
+    fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<SharedPtrBox<ChunkManager>>) -> (RegionSegmentPtr, bool) {
         //errors
         debug_assert!(inner_size > 0);
         
@@ -268,11 +268,11 @@ impl MemorySource for CachedMMSource {
 
         //manage zero status
         let mut zero: bool = false;
-        let mut res: Option<RegionSegment> = None;
+        let mut res: Option<RegionSegmentPtr> = None;
 
         //search in cache if smaller than threashold
         if total_size <= self.threashold {
-            res = self.search_in_cache(total_size,manager);
+            res = self.search_in_cache(total_size,manager.clone());
             zero = false;
         }
         
@@ -287,18 +287,18 @@ impl MemorySource for CachedMMSource {
             //if (ptr == NULL)
             //    return NULL;
             //else
-            res = Some(RegionSegment::new(ptr,total_size,manager));
+            res = Some(RegionSegment::new(ptr,total_size,manager.clone()));
         }
         
         //register
         if self.registry.is_some() && manager.is_some() && res.is_some() {
-            self.registry.as_mut().unwrap().set_segment_entry(res.unwrap());
+            self.registry.as_mut().unwrap().set_segment_entry(res.as_ref().unwrap().clone());
         }
 
         return (res.unwrap(),zero);
     }
     
-    fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<* mut ChunkManager>) -> RegionSegment {
+    fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr {
         //errors
         old_segment.sanity_check();
         
@@ -312,7 +312,7 @@ impl MemorySource for CachedMMSource {
         //unregister
         if self.registry.is_some(){
             match old_segment.get_manager() {
-                Some(_) => self.registry.as_mut().unwrap().remove_from_segment(old_segment),
+                Some(_) => self.registry.as_mut().unwrap().remove_from_segment(old_segment.clone()),
                 None => {},
             }
         }
@@ -328,13 +328,13 @@ impl MemorySource for CachedMMSource {
         }
     }
 	
-    fn unmap(&mut self,segment: RegionSegment) {
+    fn unmap(&mut self,segment: RegionSegmentPtr) {
         //errors
         segment.sanity_check();
         
         //unregister
         if self.registry.is_some() && segment.get_manager().is_some() {
-            self.registry.as_mut().unwrap().remove_from_segment(segment);
+            self.registry.as_mut().unwrap().remove_from_segment(segment.clone());
         }
         
         //if small, keep, other wise unmap
@@ -371,7 +371,7 @@ mod tests
         let mut source = CachedMMSource::new(Some(SharedPtrBox::new_ref(&registry)),MMSRC_MAX_SIZE,MMSRC_THREASHOLD,MMSRC_KEEP_RESIDUT);
 
         //allocate
-        let (seg,zeroed) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -402,7 +402,7 @@ mod tests
         let mut source = CachedMMSource::new(None,MMSRC_MAX_SIZE,MMSRC_THREASHOLD,MMSRC_KEEP_RESIDUT);
 
         //allocate
-        let (seg,zeroed) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -418,7 +418,7 @@ mod tests
         let mut source = CachedMMSource::new(Some(SharedPtrBox::new_ref(&registry)),MMSRC_MAX_SIZE,MMSRC_THREASHOLD,MMSRC_KEEP_RESIDUT);
 
         //allocate
-        let (seg,zeroed) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -429,7 +429,7 @@ mod tests
         //free & realloc
         source.unmap(seg);
 
-        let (seg,zeroed) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
         assert_eq!(zeroed,false);
         assert!(seg.get_inner_size() >= 4*1024*1024);
         assert_eq!(registry.get_segment(seg.get_root_addr()).is_some(),true);
@@ -445,8 +445,8 @@ mod tests
         let mut source = CachedMMSource::new(Some(SharedPtrBox::new_ref(&registry)),MMSRC_MAX_SIZE,MMSRC_THREASHOLD,MMSRC_KEEP_RESIDUT);
 
         //allocate
-        let (seg,zeroed) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
-        let (seg2,_) = source.map(4*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
+        let (seg2,_) = source.map(4*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -455,7 +455,7 @@ mod tests
         let addr = seg.get_root_addr();
 
         //free & realloc
-        let seg = source.remap(seg,8*1024*1024,Some(&mut manager as * mut ChunkManager));
+        let seg = source.remap(seg,8*1024*1024,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         assert!(seg.get_inner_size() >= 8*1024*1024);
         assert_eq!(registry.get_segment(seg.get_root_addr()).is_some(),true);
@@ -472,7 +472,7 @@ mod tests
         let mut source = CachedMMSource::new(Some(SharedPtrBox::new_ref(&registry)),MMSRC_MAX_SIZE,MMSRC_THREASHOLD,true);
 
         //allocate
-        let (seg,zeroed) = source.map(8*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(8*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -483,7 +483,7 @@ mod tests
         //free & realloc
         source.unmap(seg);
 
-        let (seg,zeroed) = source.map(2*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(2*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
         assert_eq!(zeroed,false);
         assert!(seg.get_inner_size() >= 2*1024*1024 && seg.get_inner_size() <= 2*1024*1024+SMALL_PAGE_SIZE);
         assert_eq!(registry.get_segment(seg.get_root_addr()).is_some(),true);
@@ -491,7 +491,7 @@ mod tests
 
         source.unmap(seg);
 
-        let (seg,zeroed) = source.map(2*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(2*1024*1024,true,Some(SharedPtrBox::new_ptr_mut(&mut manager)));
         assert_eq!(zeroed,false);
         assert!(seg.get_inner_size() >= 2*1024*1024 && seg.get_inner_size() <= 2*1024*1024+SMALL_PAGE_SIZE);
         assert_eq!(registry.get_segment(seg.get_root_addr()).is_some(),true);
@@ -508,7 +508,7 @@ mod tests
         let mut source = CachedMMSource::new(Some(SharedPtrBox::new_ref(&registry)),MMSRC_MAX_SIZE,MMSRC_THREASHOLD,false);
 
         //allocate
-        let (seg,zeroed) = source.map(8*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(8*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
 
         //check
         assert_eq!(zeroed,true);
@@ -519,13 +519,13 @@ mod tests
         //free & realloc
         source.unmap(seg);
 
-        let (seg,zeroed) = source.map(2*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg,zeroed) = source.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
         assert_eq!(zeroed,false);
         assert!(seg.get_inner_size() >= 2*1024*1024 && seg.get_inner_size() <= 2*1024*1024+SMALL_PAGE_SIZE);
         assert_eq!(registry.get_segment(seg.get_root_addr()).is_some(),true);
         assert_eq!(seg.get_root_addr(),addr);
 
-        let (seg2,zeroed) = source.map(2*1024*1024,true,Some(&mut manager as * mut ChunkManager));
+        let (seg2,zeroed) = source.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
         assert_eq!(zeroed,true);
         assert!(seg2.get_inner_size() >= 2*1024*1024 && seg2.get_inner_size() <= 2*1024*1024+SMALL_PAGE_SIZE);
         assert_eq!(registry.get_segment(seg2.get_root_addr()).is_some(),true);

@@ -15,29 +15,30 @@ use common::types::{Addr,Size,SSize};
 use common::consts::*;
 use registry::segment::RegionSegment;
 use chunk::padding::PaddedChunk;
+use common::shared::SharedPtrBox;
 
 //decl
 pub struct HugeChunkManager {
 	/// Keep track of the parent chunk manager
-	parent: Option<* mut ChunkManager>,
-	mmsource: * mut MemorySource,
+	parent: Option<SharedPtrBox<ChunkManager>>,
+	mmsource: SharedPtrBox<MemorySource>,
 }
 
 //impl
 impl HugeChunkManager {
-	pub fn new(mmsource: * mut MemorySource) -> HugeChunkManager {
+	pub fn new(mmsource: SharedPtrBox<MemorySource>) -> HugeChunkManager {
 		HugeChunkManager {
 			parent:None,
 			mmsource: mmsource,
 		}
 	}
 
-	pub fn rebind_mm_source(&mut self,mmsource: * mut MemorySource) {
+	pub fn rebind_mm_source(&mut self,mmsource: SharedPtrBox<MemorySource>) {
 		self.mmsource = mmsource;
 	}
 
 	fn get_mm_source(&mut self) -> &mut MemorySource {
-		unsafe{&mut *self.mmsource}
+		self.mmsource.get_mut()
 	}
 
 	fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool) {
@@ -61,8 +62,8 @@ impl HugeChunkManager {
 		}
 		
 		//request memory to mm source
-		let p = self as * mut ChunkManager;
-		let (segment,z) = self.get_mm_source().map(checked_size,zero,Some(p));
+		let manager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(self);
+		let (segment,z) = self.get_mm_source().map(checked_size,zero,Some(manager));
 		//allocCondWarning(segment != NULL,"Caution, get OOM in huge allocation method.");
 		
 		//setup zero
@@ -76,7 +77,7 @@ impl HugeChunkManager {
 		
 		//check for padding
 		if res % align != 0 {
-			res = PaddedChunk::new_from_segment(segment,align,size).get_content_addr();
+			res = PaddedChunk::new_from_segment(segment.clone(),align,size).get_content_addr();
 		}
 		
 		//final check
@@ -134,8 +135,8 @@ impl ChunkManager for HugeChunkManager {
 		}
 		
 		//remap
-		let p = self as * mut ChunkManager;
-		let new_segment = self.get_mm_source().remap(segment,size,Some(p));
+		let manager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(self);
+		let new_segment = self.get_mm_source().remap(segment,size,Some(manager));
 		//allocCondWarning(newSegment != NULL,"Get OOM in realloc of huge segment.");
 		debug_assert!(new_segment.get_inner_size() >= size);
 		
@@ -187,12 +188,12 @@ impl ChunkManager for HugeChunkManager {
         panic!("Should not be used as HugeChunkManager is thread safe !");
     }
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<* mut ChunkManager>) {
+    fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>) {
         self.parent = parent;
     }
 
-    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager> {
-        self.parent
+    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
+        self.parent.clone()
     }
 }
 
@@ -209,7 +210,7 @@ mod tests
 	fn basic() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 
 		let (ptr,zero) = huge.malloc(4096, BASIC_ALIGN, false);
 		assert_eq!(zero, true);
@@ -236,7 +237,7 @@ mod tests
 	fn min_size() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 
 		let (ptr,zero) = huge.malloc(8, BASIC_ALIGN, false);
 		assert_eq!(zero, true);
@@ -253,7 +254,7 @@ mod tests
 	fn align() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 
 		let (ptr,zero) = huge.malloc(8, 128, false);
 		assert_eq!(zero, true);
@@ -277,9 +278,9 @@ mod tests
 	fn rebind_mm_source() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 
-		huge.rebind_mm_source(&mut mmsource as * mut MemorySource);
+		huge.rebind_mm_source(SharedPtrBox::new_ref_mut(&mut mmsource));
 
 		mmsource.free_all();
 	}
@@ -288,7 +289,7 @@ mod tests
 	fn realloc() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 
 		let ptr = huge.realloc(0,0);
 		assert_eq!(ptr, 0);
@@ -304,7 +305,7 @@ mod tests
 	fn is_thread_safe() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 		assert_eq!(huge.is_thread_safe(), true);
 	}
 
@@ -313,7 +314,7 @@ mod tests
 	fn remote_free() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 		huge.remote_free(0);
 	}
 
@@ -321,11 +322,11 @@ mod tests
 	fn chunk_manager() {
 		let mut registry = RegionRegistry::new();
 		let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-		let mut huge = HugeChunkManager::new(&mut mmsource as * mut MemorySource);
+		let mut huge = HugeChunkManager::new(SharedPtrBox::new_ref_mut(&mut mmsource));
 		let mut manager = DummyChunkManager::new();
 
-		huge.set_parent_chunk_manager(Some(&mut manager as * mut ChunkManager));
+		huge.set_parent_chunk_manager(Some(SharedPtrBox::new_ref_mut(&mut manager)));
 
-		assert_eq!(huge.get_parent_chunk_manager().unwrap(), &mut manager as * mut ChunkManager);
+		assert_eq!(huge.get_parent_chunk_manager().unwrap().get_ptr(), (&manager as * const DummyChunkManager));
 	}
 }

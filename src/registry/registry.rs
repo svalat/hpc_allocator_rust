@@ -24,6 +24,7 @@ use portability::spinlock::SpinLock;
 use portability::osmem;
 use core::ptr;
 use core::mem;
+use common::shared::SharedPtrBox;
 
 pub type RegistryPtr = * const Region;
 
@@ -46,20 +47,20 @@ impl RegionRegistry {
 	/// @param ptr Address to use and where to store the segment header.
 	/// @param total_size Define the total size of the segment (accounting the RegionSegment header).
 	/// @param manager Optional pointer to a manager to register to the RegionRegistry.
-	pub fn set_entry( &mut self, ptr: Addr ,total_size: Size,manager: *mut ChunkManager) -> RegionSegment {
+	pub fn set_entry( &mut self, ptr: Addr ,total_size: Size,manager: SharedPtrBox<ChunkManager>) -> RegionSegmentPtr {
 		//errors
 		debug_assert!(ptr != 0);
 		debug_assert!(total_size >= REGION_SPLITTING);
 		debug_assert!(!manager.is_null());
 
 		let res = RegionSegment::new(ptr,total_size,Some(manager));
-		self.set_segment_entry(res);
+		self.set_segment_entry(res.clone());
 		
 		res
 	}
 	
 	/// Register an existing segment.
-	pub fn set_segment_entry( &mut self, segment: RegionSegment ) {
+	pub fn set_segment_entry( &mut self, segment: RegionSegmentPtr ) {
 		//errors
 		segment.full_sanitify_check();
 
@@ -80,7 +81,7 @@ impl RegionRegistry {
 		while ptr + offset < end_ptr
 		{
 			//set
-			self.set_one_segment_entry(ptr+offset,segment);
+			self.set_one_segment_entry(ptr+offset,segment.clone());
 
 			//move
 			offset += REGION_SPLITTING;
@@ -88,7 +89,7 @@ impl RegionRegistry {
 	}
 
 	/// Internal function used to register one entry into the region registry (a segment might cover many).
-	fn set_one_segment_entry(&mut self, ptr:Addr, segment: RegionSegment) {
+	fn set_one_segment_entry(&mut self, ptr:Addr, segment: RegionSegmentPtr) {
 		if ptr > PHYS_MAX_ADDR {
 			//TODO use warning
 			//allocWarning("Invalid address range in request for region registry : %p !",ptr);
@@ -105,7 +106,7 @@ impl RegionRegistry {
 		//get the local region
 		{
 			let region = self.get_region_or_create(ptr);
-			region.set(id,segment.get_ptr());
+			region.set(id,segment);
 			//TODO remove
 			assert!(!region.get(id).is_null());
 		}
@@ -148,7 +149,7 @@ impl RegionRegistry {
 
 	/// Return the segment related to a given address and panic if not found.
 	#[inline]
-	pub fn get_segment_safe(&self, ptr:Addr) -> RegionSegment {
+	pub fn get_segment_safe(&self, ptr:Addr) -> RegionSegmentPtr {
 		let seg = self.get_segment(ptr);
 		match seg {
 			Some(x) => x,
@@ -157,7 +158,7 @@ impl RegionRegistry {
 	}
 
 	/// Optionally return the region of a given address.
-	fn get_region_entry(&self,ptr:Addr) -> Option<RegionSegment> {
+	fn get_region_entry(&self,ptr:Addr) -> Option<RegionSegmentPtr> {
 		if ptr > PHYS_MAX_ADDR {
 			//allocWarning("Invalid address range in request for region registry : %p !",ptr);
 			panic!("Invalid address range in request for region registry : {} !",ptr);
@@ -181,24 +182,24 @@ impl RegionRegistry {
 		if entry.is_null() {
 			return None;
 		} else {
-			let ret = unsafe{*entry};
+			let ret = entry;
 			return Some(ret);
 		}
 	}
 
 	/// Optionally return the segment of a given address.
-	pub fn get_segment(& self,ptr: Addr) -> Option<RegionSegment> {
+	pub fn get_segment(& self,ptr: Addr) -> Option<RegionSegmentPtr> {
 		let mut entry = self.get_region_entry(ptr);
 		
 		//try previous
-		if entry.is_none() || entry.unwrap().get_root_addr() > ptr {
+		if entry.is_none() || entry.as_ref().unwrap().get_root_addr() > ptr {
 			entry = self.get_region_entry(ptr-REGION_SPLITTING);
 		}
 		
 		//check next
 		if entry.is_none() {
 			return None;
-		} else if entry.unwrap().get_root_addr() > ptr {
+		} else if entry.as_ref().unwrap().get_root_addr() > ptr {
 			return None;
 		}
 
@@ -221,7 +222,7 @@ impl RegionRegistry {
 	}
 
 	/// unregister the given segment.
-	pub fn remove_from_segment(&mut self, segment: RegionSegment) {
+	pub fn remove_from_segment(&mut self, segment: RegionSegmentPtr) {
 		//check
 		segment.sanity_check();
 
@@ -232,7 +233,7 @@ impl RegionRegistry {
 		//loop
 		let mut offset = 0;
 		while offset < size {
-			self.unset_one_segment_entry(ptr + offset, segment.get_ptr());
+			self.unset_one_segment_entry(ptr + offset, segment.clone());
 			offset += REGION_SPLITTING;
 		}
 	}
@@ -336,7 +337,7 @@ mod tests
 	fn full_workflow_one_segment() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 
 		//setup segment
 		let size = 3*1024*1024;
@@ -345,7 +346,7 @@ mod tests
 
 		//regitry
 		let mut registry = RegionRegistry::new();
-		registry.set_segment_entry(seg);
+		registry.set_segment_entry(seg.clone());
 
 		//check request before
 		let ret = registry.get_segment(ptr-1);
@@ -377,18 +378,18 @@ mod tests
 	fn full_workflow_overlap_left_before() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 
 		//setup segment 1
 		let size = 5*1024*1024;
 		let ptr = osmem::mmap(0,size);
-		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager));
+		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager.clone()));
 		let seg2 = RegionSegment::new(ptr+size/2,size/2,Some(pmanager));
 
 		//registry
 		let mut registry = RegionRegistry::new();
-		registry.set_segment_entry(seg1);
-		registry.set_segment_entry(seg2);
+		registry.set_segment_entry(seg1.clone());
+		registry.set_segment_entry(seg2.clone());
 
 		//check request before
 		let ret = registry.get_segment(ptr-1);
@@ -425,18 +426,18 @@ mod tests
 	fn full_workflow_overlap_left_after() {
 		//manager
 		let mut manager = DummyChunkManager::new();
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 
 		//setup segment 1
 		let size = 5*1024*1024;
 		let ptr = osmem::mmap(0,size);
-		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager));
+		let seg1 = RegionSegment::new(ptr,size/2,Some(pmanager.clone()));
 		let seg2 = RegionSegment::new(ptr+size/2,size/2,Some(pmanager));
 
 		//registry
 		let mut registry = RegionRegistry::new();
-		registry.set_segment_entry(seg2);
-		registry.set_segment_entry(seg1);
+		registry.set_segment_entry(seg2.clone());
+		registry.set_segment_entry(seg1.clone());
 
 		//check request before
 		let ret = registry.get_segment(ptr-1);

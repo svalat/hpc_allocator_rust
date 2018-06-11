@@ -15,8 +15,9 @@ use common::consts::*;
 use common::ops;
 use portability::osmem;
 use registry::registry::RegionRegistry;
-use registry::segment::RegionSegment;
+use registry::segment::{RegionSegment,RegionSegmentPtr};
 use core::mem;
+use common::shared::SharedPtrBox;
 
 pub struct DummyMMSource {
 	registry: Option<* mut RegionRegistry>,
@@ -48,7 +49,7 @@ impl DummyMMSource {
 
 /// Implement the memory source trait to be use inside chunk managers and allocators.
 impl MemorySource for DummyMMSource {
-	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<* mut ChunkManager>) -> (RegionSegment, bool)
+	fn map(&mut self,inner_size: Size, _zero_filled: bool, manager: Option<SharedPtrBox<ChunkManager>>) -> (RegionSegmentPtr, bool)
 	{
 		//errors
 		debug_assert!(inner_size > 0);
@@ -85,7 +86,7 @@ impl MemorySource for DummyMMSource {
 		(res,true)
 	}
 
-	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<* mut ChunkManager>) -> RegionSegment
+	fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr
 	{
 		//errors
 		old_segment.sanity_check();
@@ -100,7 +101,7 @@ impl MemorySource for DummyMMSource {
 		//unregister
 		if self.registry.is_some() && old_segment.has_manager() {
 			let registry = unsafe{&mut *self.registry.unwrap()};
-			registry.remove_from_segment(old_segment);
+			registry.remove_from_segment(old_segment.clone());
 		}
 
 		//remap
@@ -119,14 +120,14 @@ impl MemorySource for DummyMMSource {
 		res
 	}
 
-	fn unmap(&mut self,segment: RegionSegment)
+	fn unmap(&mut self,segment: RegionSegmentPtr)
 	{
 		//errors
 		segment.sanity_check();
 			
 		//unregister
 		if self.registry.is_some() && segment.has_manager() {
-			self.get_registry().remove_from_segment(segment);
+			self.get_registry().remove_from_segment(segment.clone());
 		}
 		
 		//unmap it
@@ -147,12 +148,12 @@ mod tests
 		let mut mmsource = DummyMMSource::new(Some(&mut registry));
 
 		//map
-		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(&mut manager));
+		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
 		assert!(seg1.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed,true);
 
 		//a secod to force mremap to move
-		let (seg2,zeroed2) = mmsource.map(2*1024*1024,true,Some(&mut manager));
+		let (seg2,zeroed2) = mmsource.map(2*1024*1024,true,Some(SharedPtrBox::new_ref_mut(&mut manager)));
 		assert!(seg2.get_inner_size() >= 2*1024*1024);
 		assert_eq!(zeroed2,true);
 
@@ -161,19 +162,21 @@ mod tests
 		assert_eq!(seg1_check.unwrap().get_root_addr(),seg1.get_root_addr());
 
 		//remap
-		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(&mut manager));
+		let addr = seg1.get_root_addr();
+		let seg1_remap = mmsource.remap(seg1,4*1024*1024,Some(SharedPtrBox::new_ref_mut(&mut manager)));
 
 		//check registry
-		if seg1.get_root_addr() != seg1_remap.get_root_addr() {
-			let seg1_check = registry.get_segment(seg1.get_root_addr());
+		if addr != seg1_remap.get_root_addr() {
+			let seg1_check = registry.get_segment(addr);
 			assert!(seg1_check.is_none());
 		}
 		let seg1_check = registry.get_segment(seg1_remap.get_root_addr());
 		assert_eq!(seg1_check.unwrap().get_root_addr(),seg1_remap.get_root_addr());
 
 		//unmap
-		mmsource.unmap(seg1_remap);
-		let seg1_check = registry.get_segment(seg1_remap.get_root_addr());
+		let addr_remaped = seg1_remap.get_root_addr();
+		mmsource.unmap(seg1_remap.clone());
+		let seg1_check = registry.get_segment(addr_remaped);
 		assert!(seg1_check.is_none());
 	}
 }

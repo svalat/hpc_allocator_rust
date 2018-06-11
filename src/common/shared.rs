@@ -21,15 +21,29 @@ use core::ops::{Deref, DerefMut};
 
 /// Define the struct which mostly contain a raw pointer to the data to share.
 #[derive(Copy)]
-pub struct SharedPtrBox<T> {
+pub struct SharedPtrBox<T: ?Sized> {
 	data: * const T,
 }
 
-impl <T> SharedPtrBox<T> {
+impl <T: Sized> SharedPtrBox<T> {
 	/// Setup the container as NULL.
 	pub fn new_null() -> Self {
 		Self {
 			data: ptr::null(),
+		}
+	}
+
+	/// Make it NULL.
+	pub fn set_null(&mut self) {
+		self.data = ptr::null();
+	}
+
+	/// Return pointer as an address. It panic if it is NULL.
+	pub fn get_addr(&self) -> Addr {
+		if self.data.is_null() {
+			panic!("Try to access NULL address !");
+		} else {
+			self.data as Addr
 		}
 	}
 
@@ -40,7 +54,9 @@ impl <T> SharedPtrBox<T> {
 			data: data as * const T,
 		}
 	}
+}
 
+impl <T: ?Sized> SharedPtrBox<T> {
 	/// Build the container from a const reference to the data to point.
 	/// **Caution**: this is usefull for unit test but in practive your need to ensure
 	/// that the object live long enougth as the compiler will not check for you.
@@ -118,6 +134,11 @@ impl <T> SharedPtrBox<T> {
 		self.data.is_null()
 	}
 
+	//check if contain something
+	pub fn is_some(&self) -> bool {
+		! self.data.is_null()
+	}
+
 	/// Return the internal pointer. This panic if it is NULL.
 	pub fn get_ptr(&self) -> * const T {
 		if self.data.is_null() {
@@ -135,38 +156,32 @@ impl <T> SharedPtrBox<T> {
 			self.data as * mut T
 		}
 	}
-
-	/// Return pointer as an address. It panic if it is NULL.
-	pub fn get_addr(&self) -> Addr {
-		if self.data.is_null() {
-			panic!("Try to access NULL address !");
-		} else {
-			self.data as Addr
-		}
-	}
-
-	/// Make it NULL.
-	pub fn set_null(&mut self) {
-		self.data = ptr::null();
-	}
 }
 
+impl <T: ?Sized>  PartialEq for SharedPtrBox<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
+impl <T: ?Sized> Eq for SharedPtrBox<T> {}
+
 /// Implement deref for spin lock guard
-impl<T> Deref for SharedPtrBox<T>
+impl<T: ?Sized> Deref for SharedPtrBox<T>
 {
     type Target = T;
     fn deref(& self) -> & T { self.get() }
 }
 
 /// Implement deref mutable for spin lock guard
-impl<T> DerefMut for SharedPtrBox<T>
+impl<T: ?Sized> DerefMut for SharedPtrBox<T>
 {
     fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
 }
 
 /// Implement clone.chunk
 /// TODO this was to fix some issues but we might use [derive] for this.
-impl <T> Clone for SharedPtrBox<T> {
+impl <T: ?Sized> Clone for SharedPtrBox<T> {
 	fn clone(&self) -> Self { 
 		Self {
 			data: self.data
@@ -175,10 +190,10 @@ impl <T> Clone for SharedPtrBox<T> {
 }
 
 /// Make it usable into threads
-unsafe impl <T> Sync for SharedPtrBox<T> {}
+unsafe impl <T: ?Sized> Sync for SharedPtrBox<T> {}
 
 /// Make it usable into closures.
-unsafe impl <T> Send for SharedPtrBox<T> {}
+unsafe impl <T: ?Sized> Send for SharedPtrBox<T> {}
 
 #[cfg(test)]
 mod tests
@@ -187,6 +202,9 @@ mod tests
 
 	use common::shared::*;
 	use portability::spinlock::*;
+	use chunk::dummy::DummyChunkManager;
+	use core::mem;
+	use common::traits::ChunkManager;
 
 	#[test]
 	fn basic_1_ref() {
@@ -263,5 +281,13 @@ mod tests
 		let mut copy = SharedPtrBox::new_ref(&a);
 		*copy = 11;
 		assert_eq!(*copy,11);
+	}
+
+	#[test]
+	fn contain_trait() {
+		let a = DummyChunkManager::new();
+		let mut p = SharedPtrBox::new_ref(&a);
+		p.get_mut().free(0);
+		assert_eq!(mem::size_of::<SharedPtrBox<ChunkManager>>(), 16);
 	}
  }

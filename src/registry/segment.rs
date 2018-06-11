@@ -12,13 +12,13 @@
 use common::types::{Size,Addr};
 use common::traits::{ChunkManager};
 use common::consts::*;
+use common::shared::SharedPtrBox;
 use core::mem;
 
 ///A region is a segment of the memory of a size at least 
 ///MACRO_BLOC_SIZE, it is used to be handled by the 
 ///memory source and registred into the region registry.
 ///It is handled by a chunk manager
-#[derive(Copy,Clone)]
 pub struct RegionSegment
 {
 	///Base address, this eat 8 bytes but permit to copy the struct instead of having to handle
@@ -27,10 +27,10 @@ pub struct RegionSegment
 	///Keep track of the size of the segement
 	size: Size,
 	///pointer to the chunk manager to handle its content
-	manager: Option<* mut ChunkManager>,
+	manager: Option<SharedPtrBox<ChunkManager>>,
 }
 
-pub type RegionSegmentPtr = * const RegionSegment;
+pub type RegionSegmentPtr = SharedPtrBox<RegionSegment>;
 
 //Implementation
 impl RegionSegment {
@@ -39,40 +39,35 @@ impl RegionSegment {
 	/// **ptr**: Base address of the segment, should ideally be aligned on page size.
 	/// **total_size**: Total size of the segment. Header will be added on start so inner content size will be lower.
 	/// **manager**: Pointer to the chunk manager to manage chunks inside the segment.
-	pub fn new(ptr: Addr,total_size: Size, manager: Option<*mut ChunkManager>) -> RegionSegment {
+	pub fn new(ptr: Addr,total_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr {
 		//check
 		debug_assert!(ptr % SMALL_PAGE_SIZE == 0);
 
 		//cast address into struct ref
-		let segptr = ptr as * mut RegionSegment;
+		let mut segment: SharedPtrBox<RegionSegment> = SharedPtrBox::new_addr(ptr);
 
 		//fill
-		let segment = unsafe{ &mut *segptr };
 		segment.base = ptr;
 		segment.size = total_size;
 		segment.manager = manager;
 
 		//return
-		*segment
+		segment
 	}
 
-	pub fn get_from_content_ptr(ptr: Addr) -> RegionSegment {
+	pub fn get_from_content_ptr(ptr: Addr) -> RegionSegmentPtr {
 		debug_assert!(ptr != 0);
 		Self::get_segment_from_base_ptr(ptr - mem::size_of::<RegionSegment>())
 	}
 
 	///Return a segment from address.
-	pub fn get_segment_from_base_ptr(ptr: Addr) -> RegionSegment {
+	pub fn get_segment_from_base_ptr(ptr: Addr) -> RegionSegmentPtr {
 		//check
 		debug_assert!(ptr != 0);
 		debug_assert!(ptr % SMALL_PAGE_SIZE == 0);
 
 		//convert
-		let regptr = ptr as * mut RegionSegment;
-		let region = unsafe{ *regptr };
-
-		//ret
-		region
+		RegionSegmentPtr::new_addr(ptr)
 	}
 
 	///Make some sanity check of content to help debugging and quickly find issues.
@@ -95,14 +90,14 @@ impl RegionSegment {
 	#[inline]
 	pub fn get_ptr(&self) -> RegionSegmentPtr {
 		self.sanity_check();
-		self.base as RegionSegmentPtr
+		SharedPtrBox::new_addr(self.base)
 	}
 
 	///Update manager
-	pub fn set_manager(self:&mut Self,manager: Option<*mut ChunkManager>) {
+	pub fn set_manager(self:&mut Self,manager: Option<SharedPtrBox<ChunkManager>>) {
 		//check
 		self.sanity_check();
-		debug_assert!(self.manager.is_none() || manager.is_none() || self.manager == manager);
+		debug_assert!(self.manager.is_none() || manager.is_none() || self.manager.as_ref().unwrap().get_ptr() == manager.as_ref().unwrap().get_ptr());
 
 		//setup
 		self.manager = manager;
@@ -110,7 +105,7 @@ impl RegionSegment {
 
 	//return the base addr
 	#[inline]
-	pub fn get_root_addr(self:&Self) -> Addr {
+	pub fn get_root_addr(&self) -> Addr {
 		//check
 		self.sanity_check();
 		
@@ -158,31 +153,25 @@ impl RegionSegment {
 
 	///Return manager in safe way
 	#[inline]
-	pub fn get_manager(self: &Self) -> Option<&ChunkManager> {
+	pub fn get_manager(self: &Self) -> Option<SharedPtrBox<ChunkManager>> {
 		//check
 		self.sanity_check();
 
 		//switch
-		match self.manager {
-			Some(x) => Some(unsafe{&*x}),
-			None => None,
-		}
+		self.manager.clone()
 	}
 
 	///Retuen mutable manager in safe way
 	#[inline]
-	pub fn get_manager_mut(self: & Self) -> Option<&mut ChunkManager> {
+	pub fn get_manager_mut(self: & Self) -> Option<SharedPtrBox<ChunkManager>> {
 		//check
 		self.sanity_check();
 
 		//switch
-		match self.manager {
-			Some(x) => Some(unsafe{&mut *x}),
-			None => None
-		}
+		self.manager.clone()
 	}
 
-	pub fn has_manager(self) -> bool {
+	pub fn has_manager(&self) -> bool {
 		match self.manager {
 			Some(_) => true,
 			None => false,
@@ -208,7 +197,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let _reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		osmem::munmap(ptr,4*4096);
 	}
@@ -225,8 +214,8 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
-		let mut reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
+		let mut reg = RegionSegment::new(ptr,4*4096,Some(pmanager.clone()));
 		reg.set_manager(Some(pmanager));
 		osmem::munmap(ptr,4*4096);
 	}
@@ -236,7 +225,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		let addr = reg.get_content_addr();
 		assert_eq!(addr,ptr+32);
@@ -248,7 +237,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.contain(ptr),true);
 		assert_eq!(reg.contain(ptr+4*4096-1),true);
@@ -262,7 +251,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.get_total_size(),4*4096);
 		osmem::munmap(ptr,4*4096);
@@ -273,7 +262,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		assert_eq!(reg.get_inner_size(),4*4096-32);
 		osmem::munmap(ptr,4*4096);
@@ -284,7 +273,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		reg.get_manager().unwrap();
 		osmem::munmap(ptr,4*4096);
@@ -295,7 +284,7 @@ mod tests
 		let ptr = osmem::mmap(0,4*4096);
 		//TODO replace by MOCK
 		let mut manager = DummyChunkManager{};
-		let pmanager = &mut manager as *mut ChunkManager;
+		let pmanager: SharedPtrBox<ChunkManager> = SharedPtrBox::new_ref_mut(&mut manager);
 		let reg = RegionSegment::new(ptr,4*4096,Some(pmanager));
 		reg.get_manager_mut().unwrap();
 		osmem::munmap(ptr,4*4096);

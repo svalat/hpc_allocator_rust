@@ -10,7 +10,8 @@
 ///In rust this represent mostly the Trait.
 
 use common::types::{Size,Addr};
-use registry::segment::RegionSegment;
+use common::shared::SharedPtrBox;
+use registry::segment::RegionSegmentPtr;
 
 /// A chunk manager is an object handling the sub allocation inside a macro bloc. We will
 /// find many types inside the allocator : huge, medium and small with various way to handle it.
@@ -57,11 +58,11 @@ pub trait ChunkManager {
 	fn remote_free(&mut self,ptr: Addr);
 
     /// attach a parent to the current chunk manager if not already done at build time.
-    fn set_parent_chunk_manager(&mut self,parent: Option<* mut ChunkManager>);
+    fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>);
 
     /// get the current parent chunk manager if has a hierarchie.
     /// This is used to support remote free and realloc going from one chunk to another.
-    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager>;
+    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>>;
 }
 
 /// Define the interace which need to be followed by a memory allocator.
@@ -73,7 +74,7 @@ pub trait Allocator: ChunkManager
     fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool);
 
     /// Check if the given chunk manager is the current one
-	fn is_local_chunk_manager(&self, manager: * const ChunkManager) -> bool;
+	fn is_local_chunk_manager(&self, manager: SharedPtrBox<ChunkManager>) -> bool;
 
     /// Apply flush operation on pending remote frees registred into the chunk manager
     fn flush_remote(&mut self);
@@ -95,16 +96,16 @@ pub trait MemorySource {
     /// @parma manager Optionally define a chunk manager to be used to register the segment into the region registry.
     /// 
     /// @return Return the RegionSegment and a boolean telling is the segment has been zeroed of not.
-	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: Option<* mut ChunkManager>) -> (RegionSegment, bool);
+	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: Option<SharedPtrBox<ChunkManager>>) -> (RegionSegmentPtr, bool);
 
     /// Remap an existing segment. This on Linux directly redirect to mremap but can on some other system
     /// rely on allocator + copy + deallocation. It also take care of moving the registration into the
     /// RegionRegisty. We can also change the ChunkManager owning the segment.
-	fn remap(&mut self,old_segment: RegionSegment,new_inner_size: Size, manager: Option<* mut ChunkManager>) -> RegionSegment;
+	fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<SharedPtrBox<ChunkManager>>) -> RegionSegmentPtr;
 	
     /// Unmap the segment. Then we can decide in the MemorySource if we keep it for latter use of if we return
     /// it to the OS.
-    fn unmap(&mut self,segment: RegionSegment);
+    fn unmap(&mut self,segment: RegionSegmentPtr);
 
     //TODO see if we need.
 	//virtual bool haveEfficientRemap(void) const = 0;

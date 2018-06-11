@@ -11,7 +11,7 @@
 
 //import
 use chunk::medium::pools::{ChunkInsertMode,MediumFreePool};
-use chunk::medium::chunk::{MediumChunk,MediumChunkPtr};
+use chunk::medium::chunk::{MediumChunkPtr};
 use portability::spinlock::SpinLock;
 use common::traits::{ChunkManager,MemorySource};
 use registry::registry::RegionRegistry;
@@ -19,22 +19,23 @@ use common::types::{Addr,Size};
 use common::consts::*;
 use common::ops;
 use chunk::padding::PaddedChunk;
+use common::shared::SharedPtrBox;
 
 struct MediumAllocatorLocked {
 	pools: MediumFreePool,
-	mmsource: Option<* mut MemorySource>,
+	mmsource: Option<SharedPtrBox<MemorySource>>,
 }
 
 /// Implement the medium chunk allocator based on MediumFreePool
 struct MediumAllocator {
 	locked: SpinLock<MediumAllocatorLocked>,
-	registry: Option<* mut RegionRegistry>,
+	registry: Option<SharedPtrBox<RegionRegistry>>,
 	use_lock: bool,
 }
 
 //implement
 impl MediumAllocator {
-	pub fn new(use_lock: bool, mmsource: Option<* mut MemorySource>) -> Self {
+	pub fn new(use_lock: bool, mmsource: Option<SharedPtrBox<MemorySource>>) -> Self {
 		Self {
 			locked: SpinLock::new(MediumAllocatorLocked {
 				pools: MediumFreePool::new(),
@@ -77,7 +78,7 @@ impl MediumAllocator {
 			match chunk {
 				Some(_) => zero = false,
 				None => {
-					let (tchunk, tzero) = Self::refill(&mut *guard,checked_size,zero,self as * const ChunkManager as * mut ChunkManager);
+					let (tchunk, tzero) = Self::refill(&mut *guard,checked_size,zero,SharedPtrBox::new_ptr_mut(self as * const ChunkManager as * mut ChunkManager));
 					chunk = tchunk;
 					zero = tzero;
 				},
@@ -115,7 +116,7 @@ impl MediumAllocator {
 		return (res,zero);
 	}
 
-	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: * mut ChunkManager) -> (Option<MediumChunkPtr>, bool) {
+	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: SharedPtrBox<ChunkManager>) -> (Option<MediumChunkPtr>, bool) {
 		//errors
 		/*debug_assert!(size > 0);
 		
@@ -180,11 +181,11 @@ impl ChunkManager for MediumAllocator {
 		panic!("TODO");
 	}
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<* mut ChunkManager>) {
+    fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>) {
 		panic!("TODO");
 	}
 
-    fn get_parent_chunk_manager(&mut self) -> Option<* mut ChunkManager> {
+    fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
 		panic!("TODO");
 	}
 }

@@ -13,7 +13,7 @@
 use common::types::{Addr,Size};
 use common::shared::SharedPtrBox;
 use common::consts::*;
-use registry::segment::RegionSegment;
+use registry::segment::{RegionSegmentPtr};
 use core::mem;
 
 /// Define the header to place before the returned address. This is used
@@ -25,9 +25,9 @@ pub struct PaddedChunk {
 
 impl PaddedChunk {
 	/// Create a new padded header from RegionSegment.
-	pub fn new_from_segment(seg: RegionSegment, align: Size, requested_size: Size) -> SharedPtrBox<Self> {
+	pub fn new_from_segment(seg: RegionSegmentPtr, align: Size, requested_size: Size) -> SharedPtrBox<Self> {
 		seg.sanity_check();
-		let padding = PaddedChunk::calc_padding_for_segment(seg, align, requested_size);
+		let padding = PaddedChunk::calc_padding_for_segment(seg.clone(), align, requested_size);
 		Self::new_from_ptr(seg.get_content_addr(),padding,seg.get_inner_size())
 	}
 
@@ -90,7 +90,7 @@ impl PaddedChunk {
 	}
 
 	/// Caclulate the padding necessary for a given segement.
-	pub fn calc_padding_for_segment(segment: RegionSegment, align:Size, request_size: Size) -> Size {
+	pub fn calc_padding_for_segment(segment: RegionSegmentPtr, align:Size, request_size: Size) -> Size {
 		//errors
 		segment.sanity_check();
 
@@ -158,7 +158,7 @@ mod tests
 	fn pad_segment() {
 		let addr = osmem::mmap(0,4096);
 		let seg = RegionSegment::new(addr,4096,None);
-		let padded = PaddedChunk::new_from_segment(seg, 64, 1024);
+		let padded = PaddedChunk::new_from_segment(seg.clone(), 64, 1024);
 
 		let pad = padded.get_content_addr();
 		assert_eq!(pad%64,0);
