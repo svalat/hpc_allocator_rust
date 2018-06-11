@@ -63,13 +63,9 @@ impl PaddedChunk {
 		(self as * const Self as Addr) + mem::size_of::<Self>()
 	}
 
-	/// Caclulate the padding necessary for a given segement.
-	pub fn calc_padding_for_segment(segment: RegionSegment, align:Size, request_size: Size) -> Size {
-		//errors
-		segment.sanity_check();
-		
+	pub fn calc_padding(addr: Addr, align: Size, request_size: Size, mem_size: Size) -> Size {
 		//calc current align
-		let mut delta = segment.get_content_addr() % align;
+		let mut delta = addr % align;
 		if delta != 0 {
 			delta = align - delta;
 			debug_assert!(delta >= mem::size_of::<Self>());
@@ -86,11 +82,20 @@ impl PaddedChunk {
 		}
 		
 		//check size
-		if segment.get_inner_size() < delta + request_size {
+		if mem_size < delta + request_size {
 			panic!("Segment is too small for the requested padding !");
 		}
 		
 		delta
+	}
+
+	/// Caclulate the padding necessary for a given segement.
+	pub fn calc_padding_for_segment(segment: RegionSegment, align:Size, request_size: Size) -> Size {
+		//errors
+		segment.sanity_check();
+
+		//ret
+		return Self::calc_padding(segment.get_content_addr(), align, request_size,segment.get_inner_size());
 	}
 
 	/// Build padding info and pad an address.

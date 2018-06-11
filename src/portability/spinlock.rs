@@ -38,6 +38,7 @@ pub struct SpinLockGuard<'a, T:'a>
 {
     lock: &'a PthreadSpinLock,
     data: &'a mut T,
+	unlock: bool,
 }
 
 ///Implement spinlock
@@ -67,6 +68,23 @@ impl <T> SpinLock<T> {
         {
             lock: &self.lock,
             data: unsafe{&mut *(&self.data as * const T as * mut T)},
+			unlock: true,
+        }
+    }
+
+	///lock
+ 	pub fn optional_lock(&self, lock: bool) -> SpinLockGuard<T>
+    {
+		let ptr = &self.lock as * const PthreadSpinLock;
+		if lock {
+        	unsafe{pthread_spin_lock(ptr)};
+		}
+
+        SpinLockGuard
+        {
+            lock: &self.lock,
+            data: unsafe{&mut *(&self.data as * const T as * mut T)},
+			unlock: lock,
         }
     }
 
@@ -95,8 +113,10 @@ impl<'a, T> Drop for SpinLockGuard<'a, T>
 {
     fn drop(&mut self)
     {
-        let ptr = self.lock as * const PthreadSpinLock;
-        unsafe{pthread_spin_unlock(ptr)};
+        if self.unlock {
+			let ptr = self.lock as * const PthreadSpinLock;
+        	unsafe{pthread_spin_unlock(ptr)};
+		}
     }
 }
 
