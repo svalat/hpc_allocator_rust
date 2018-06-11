@@ -15,7 +15,7 @@ extern crate libc;
 use registry::registry::RegionRegistry;
 use mmsource::dummy::DummyMMSource;
 use chunk::dummy::DummyChunkManager;
-use common::traits::MemorySource;
+use common::traits::{ChunkManagerPtr,MemorySource};
 use core::panic::PanicInfo;
 use core::intrinsics;
 
@@ -26,7 +26,7 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 	let mut mmsource = DummyMMSource::new(Some(&mut registry));
 	let mut manager = DummyChunkManager::new();
 
-	let (seg,_zeroed) = mmsource.map(size * 4096, true, Some(&mut manager));
+	let (seg,_zeroed) = mmsource.map(size * 4096, true, Some(ChunkManagerPtr::new_ref_mut(&mut manager)));
 	
 	seg.get_root_addr() as * mut libc::c_void
 }

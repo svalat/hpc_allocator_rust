@@ -17,7 +17,6 @@ use portability::osmem;
 use registry::registry::RegionRegistry;
 use registry::segment::{RegionSegment,RegionSegmentPtr};
 use core::mem;
-use common::shared::SharedPtrBox;
 
 pub struct DummyMMSource {
 	registry: Option<* mut RegionRegistry>,
