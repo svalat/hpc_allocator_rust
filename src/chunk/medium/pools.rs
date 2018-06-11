@@ -418,18 +418,21 @@ impl MediumFreePool {
 		return pos;
 	}
 
+	/// Return the list class from list id
 	fn get_list_class(&self, list:ChunkFreeListId) -> Size {
 		debug_assert!(list < NB_FREE_LIST);
 		//assume_m(id >= 0 && id < NB_FREE_LIST,"The given list didn't be a member of the given thread pool.");
 		return self.sizes[list];
 	}
 
+	/// Change the empty status of the given free list, false for empty, true for filled.
 	fn set_empty_status(&mut self, id:ChunkFreeListId, filled: bool) {
 		debug_assert!(id < NB_FREE_LIST);
 		
 		self.status[id] = filled;
 	}
 
+	/// Search in the given list for an adaquate chunk.
 	fn find_adapted_chunk(&mut self, list:ChunkFreeListId, inner_size: Size) -> Option<MediumChunkPtr> {
 		//errors
 		debug_assert!( inner_size > 0);
@@ -447,6 +450,7 @@ impl MediumFreePool {
 		sel
 	}
 
+	/// Start from the given list and search the next non empty list (with bigger chunks)
 	fn get_first_next_non_empty_list(&mut self, id:ChunkFreeListId) -> Option<ChunkFreeListId> {
 		//errors
 		debug_assert!(self.nb_list > 0);
@@ -464,6 +468,8 @@ impl MediumFreePool {
 		return None;
 	}
 
+	/// Analystical reverse function to get list id from size. Work only for the default
+	/// size class list.
 	fn reverse_default_free_sizes(&self,size:Size) -> usize {
 		//errors
 		debug_assert!(self.fast_reverse);
@@ -499,8 +505,8 @@ mod tests
 	use portability::osmem;
 
 	//for tests
-	static TEST_SIZE_LIST: [Size; NB_FREE_LIST] = [8,16,32,64,128,1,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value()
-		,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+	static TEST_SIZE_LIST: [Size; NB_FREE_LIST] = [8,16,32,64,128,1,Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
+		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
 		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
 		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
 		Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),Size::max_value(),
