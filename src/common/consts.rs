@@ -10,7 +10,7 @@
 /// the allocator
 
 use core::mem;
-use common::types::{SSize,Size};
+use common::types::{SSize,Size,Addr};
 
 //global values
 /// Define basic alignement handled by standared chunk manager for any size larger than this one.
@@ -34,6 +34,7 @@ pub const MEDIUM_MIN_INNER_SIZE: Size = 16;
 //#define ADDR_NULL 0
 //#define ALLOC_DO_WARNING true
 //#define HUGE_ALLOC_THREASHOLD (MACRO_BLOC_SIZE/2)
+pub const NULL: Addr = 0;
 
 //about region mecanism
 /// Define the basic size we used to split the address space and minimum size we consider

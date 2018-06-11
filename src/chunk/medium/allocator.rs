@@ -11,16 +11,18 @@
 
 //import
 use chunk::medium::pools::{ChunkInsertMode,MediumFreePool};
-use chunk::medium::chunk::{MediumChunk,MediumChunkPtr};
+use chunk::medium::chunk::*;
 use portability::spinlock::SpinLock;
 use common::traits::{ChunkManager,MemorySource};
 use registry::registry::RegionRegistry;
-use common::types::{Addr,Size};
+use common::types::{Addr,Size,SSize};
 use common::consts::*;
 use common::ops;
 use chunk::padding::PaddedChunk;
 use common::shared::SharedPtrBox;
 use core::mem;
+use registry::segment::RegionSegment;
+use portability::libc;
 
 struct MediumAllocatorLocked {
 	pools: MediumFreePool,
@@ -32,6 +34,7 @@ struct MediumAllocator {
 	locked: SpinLock<MediumAllocatorLocked>,
 	registry: Option<SharedPtrBox<RegionRegistry>>,
 	use_lock: bool,
+	parent: Option<SharedPtrBox<ChunkManager>>,
 }
 
 //implement
@@ -44,6 +47,7 @@ impl MediumAllocator {
 			}),
 			registry: None,
 			use_lock: use_lock,
+			parent: None,
 		}
 	}
 
@@ -117,6 +121,10 @@ impl MediumAllocator {
 		return (res,zero);
 	}
 
+	pub fn rebind_mm_source(&mut self,mmsource: Option<SharedPtrBox<MemorySource>>) {
+		self.locked.lock().mmsource = mmsource;
+	}
+
 	fn refill(locked: &mut MediumAllocatorLocked, size: Size, zero_filled: bool, manager: SharedPtrBox<ChunkManager>) -> (Option<MediumChunkPtr>, bool) {
 		//errors
 		debug_assert!(size > 0);
@@ -167,42 +175,195 @@ impl MediumAllocator {
 
 impl ChunkManager for MediumAllocator {
 	fn free(&mut self,addr: Addr) {
-		panic!("TODO");
+		//trivial
+		if addr == 0 {
+			return;
+		}
+		
+		//check if padded
+		let ptr = PaddedChunk::unpad(addr);
+		
+		//get chunk
+		let chunk = MediumChunk::get_chunk_safe(ptr);
+		let mut schunk;
+		if chunk.is_none() {
+			return;
+		} else{
+			schunk = chunk.unwrap();
+		}
+		
+		//check status
+		if schunk.get_status() == CHUNK_FREE {
+			//allocCondWarning(ALLOC_DO_WARNING,"Double free, ignoring the request.");
+			panic!("Double free corruption !");
+		}
+		
+		//take lock for the current function
+		let mmsource;
+		{
+			let mut guard = self.locked.optional_lock(self.use_lock);
+			//try merge
+			schunk = guard.pools.merge(schunk);
+			mmsource = guard.mmsource.clone();
+			
+			//if whe have a source, we may try to check if we can clear the bloc
+			//we didn't do it here to avoid to take time in critical section
+			//as this actions didn't require the local lock
+			if guard.mmsource.is_none() || schunk.is_single() == false {
+				guard.pools.insert_chunk(schunk,ChunkInsertMode::FIFO);
+				return;
+			}
+		}
+		
+		//if need final free to mm source
+		debug_assert!(schunk.is_single());
+		mmsource.unwrap().unmap(RegionSegment::get_segment_from_base_ptr(schunk.get_root_addr()));
 	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
-		panic!("TODO");
+		let old_ptr = ptr;
+	
+		//trivial
+		if ptr == NULL && size == NULL {
+			return NULL;
+		} else if ptr == NULL {
+			return self.malloc(size, BASIC_ALIGN, false).0;
+		} else if size == NULL {
+			self.free(ptr);
+			return NULL;
+		}
+		
+		//check if padded
+		let ptr = PaddedChunk::unpad(ptr);
+		
+		//get old size
+		let chunk = MediumChunk::get_chunk_safe(ptr);
+		let schunk;
+		match chunk {
+			Some(x) => schunk = x,
+			None => {
+				panic!("Try to reallocate an invalid segment, cannot proceed, return NULL");
+				//return NULL;
+			}
+		}
+
+		//TODO assume
+		let old_size = schunk.get_inner_size();
+		let delta = old_size as SSize - size as SSize;
+		
+		//if can resuse old one without resize
+		if old_size >= size && delta <= REALLOC_THREASHOLD {
+			return old_ptr;
+		}
+		
+		//check if can realloc the next one
+		//TODO maybe find a way to avoid to retake the lock for next malloc call
+		{
+			let mut guard = self.locked.optional_lock(self.use_lock);
+
+			//try merge
+			let merged;
+			if size > old_size {
+				merged = guard.pools.try_merge_for_size(schunk.clone(),size);
+			} else {
+				merged = Some(schunk.clone());
+			}
+
+			//is not merged
+			match merged {
+				Some(merged) => {
+					//check
+					debug_assert!(merged == schunk);
+					debug_assert!(merged.get_inner_size() >= size);
+			
+					//check for split
+					let residut = Self::split(merged.clone(),size);
+					debug_assert!(merged.get_inner_size() >= size);
+					match residut {
+						Some(x) => guard.pools.insert_chunk(x,ChunkInsertMode::LIFO),
+						None => {},
+					}
+									
+					//ok return, the lock is auto removed by TakeLock destructor
+					return merged.get_content_addr();
+				},
+				None => {},
+			}
+		}
+		
+		//ok do alloc/copy/free
+		let new_ptr = self.malloc(size,BASIC_ALIGN,false).0;
+		if new_ptr != NULL {
+			libc::memcpy(new_ptr,ptr,size.max(old_size));
+		}
+
+		//free olf
+		self.free(ptr);
+		
+		//Return
+		return new_ptr;
 	}
 
 	fn get_inner_size(&mut self,ptr: Addr) -> Size {
-		panic!("TODO");
+		//trivial
+		if ptr == NULL {
+			return 0;
+		}
+		
+		//unpadd
+		let real_ptr = PaddedChunk::unpad(ptr);
+		debug_assert!(real_ptr <= ptr);
+		let delta = ptr - real_ptr;
+		
+		let chunk = MediumChunk::get_chunk_safe(real_ptr);
+		match chunk {
+			Some(chunk) => return chunk.get_inner_size() - delta,
+			None => return 0,
+		}
 	}
 
     fn get_total_size(&mut self,ptr: Addr) -> Size {
-		panic!("TODO");
+		//trivial
+		if ptr == NULL {
+			return 0;
+		}
+		
+		//unpadd
+		let real_ptr = PaddedChunk::unpad(ptr);
+		debug_assert!(real_ptr <= ptr);
+		
+		let chunk = MediumChunk::get_chunk_safe(real_ptr);
+		match chunk {
+			Some(chunk) => return chunk.get_total_size(),
+			None => return 0,
+		}
 	}
 
-    fn get_requested_size(&mut self,ptr: Addr) -> Size {
-		panic!("TODO");
+    fn get_requested_size(&mut self,_ptr: Addr) -> Size {
+		UNSUPPORTED
 	}
 	
     fn hard_checking(&mut self,) {
-		panic!("TODO");
+		self.locked.lock().pools.hard_checking();
 	}
 
 	fn is_thread_safe(&self) -> bool {
-		panic!("TODO");
+		self.use_lock
 	}
 
     fn remote_free(&mut self,ptr: Addr) {
-		panic!("TODO");
+		if self.use_lock {
+			self.free(ptr);
+		} else {
+			panic!("Unsuppported remoteFree() function for medium allocators without locks.");
+		}
 	}
 
     fn set_parent_chunk_manager(&mut self,parent: Option<SharedPtrBox<ChunkManager>>) {
-		panic!("TODO");
+		self.parent = parent;
 	}
 
     fn get_parent_chunk_manager(&mut self) -> Option<SharedPtrBox<ChunkManager>> {
-		panic!("TODO");
+		self.parent.clone()
 	}
 }

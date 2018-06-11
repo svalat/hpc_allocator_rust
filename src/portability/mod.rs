@@ -12,3 +12,4 @@
 pub mod osmem;
 pub mod spinlock;
 pub mod arch;
+pub mod libc;
