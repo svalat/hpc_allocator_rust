@@ -41,7 +41,7 @@ impl HugeChunkManager {
 		self.mmsource.get_mut()
 	}
 
-	fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool) {
+	pub fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool) {
 		let mut zero = zero_filled;
 		let mut checked_size = size;
 

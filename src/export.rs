@@ -13,22 +13,29 @@
 extern crate libc;
 
 use registry::registry::RegionRegistry;
-use mmsource::dummy::DummyMMSource;
-use chunk::dummy::DummyChunkManager;
-use common::traits::{ChunkManagerPtr,MemorySource};
+use mmsource::cached::CachedMMSource;
+use common::traits::{MemorySourcePtr};
 use core::panic::PanicInfo;
 use core::intrinsics;
+use chunk::huge::HugeChunkManager;
+use chunk::medium::manager::MediumChunkManager;
+use common::consts::*;
+use common::shared::SharedPtrBox;
 
 // Entry point for this program
 #[no_mangle]
 pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 	let mut registry = RegionRegistry::new();
-	let mut mmsource = DummyMMSource::new(Some(&mut registry));
-	let mut manager = DummyChunkManager::new();
+	let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
+    let pmmsource = MemorySourcePtr::new_ref_mut(&mut mmsource);
+	let mut huge_manager = HugeChunkManager::new(pmmsource.clone());
+    let mut medium_manager = MediumChunkManager::new(true, Some(pmmsource.clone()));
 
-	let (seg,_zeroed) = mmsource.map(size * 4096, true, Some(ChunkManagerPtr::new_ref_mut(&mut manager)));
-	
-	seg.get_root_addr() as * mut libc::c_void
+	if size < 1024 {
+        medium_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
+    } else {
+        huge_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
+    }
 }
 
 // These functions and traits are used by the compiler, but not

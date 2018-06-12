@@ -31,7 +31,7 @@ struct MediumChunkManagerLocked {
 }
 
 /// Implement the medium chunk allocator based on MediumFreePool
-struct MediumChunkManager {
+pub struct MediumChunkManager {
 	locked: SpinLock<MediumChunkManagerLocked>,
 	registry: Option<SharedPtrBox<RegionRegistry>>,
 	use_lock: bool,

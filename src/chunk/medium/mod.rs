@@ -9,6 +9,6 @@
 //This module implement all the components used to build the medium chunk manager.
 
 //import
-mod chunk;
-mod pools;
-mod manager;
+pub mod chunk;
+pub mod pools;
+pub mod manager;
