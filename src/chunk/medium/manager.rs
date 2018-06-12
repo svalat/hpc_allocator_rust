@@ -252,7 +252,7 @@ impl ChunkManager for MediumChunkManager {
 		
 		//if need final free to mm source
 		debug_assert!(schunk.is_single());
-		mmsource.unwrap().unmap(RegionSegment::get_segment_from_base_ptr(schunk.get_root_addr()));
+		mmsource.unwrap().unmap(RegionSegment::get_from_content_ptr(schunk.get_root_addr()));
 	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
@@ -657,5 +657,36 @@ mod tests
 		assert_eq!(manager.get_inner_size(res),64);
 		assert_eq!(manager.get_total_size(res),64+mem::size_of::<MediumChunk>());
 		assert_eq!(manager.get_requested_size(res),UNSUPPORTED);
+	}
+
+	#[test]
+	fn mmsource_refill() {
+		//TODO need mocking which does not work with no_std !
+	}
+
+	#[test]
+	fn mmsource_free() {
+		//TODO need mocking which does not work with no_std !
+	}
+
+	#[test]
+	fn full_workflow() {
+		let mut registry = RegionRegistry::new();
+		let mut mmsource = DummyMMSource::new(Some(&mut registry));
+		let mut manager = MediumChunkManager::new(false, Some(MemorySourcePtr::new_ptr_mut(&mut mmsource)));
+
+		//alloc
+		let (ptr,_zero) = manager.malloc(64, BASIC_ALIGN, false);
+
+		//realloc
+		let mut pmanager = registry.get_segment(ptr).unwrap().get_manager().unwrap();
+		let ptr = pmanager.realloc(ptr,128);
+
+		//free
+		let mut pmanager = registry.get_segment(ptr).unwrap().get_manager().unwrap();
+		pmanager.free(ptr);
+
+		//check free
+		assert_eq!(registry.get_segment(ptr).is_none(),true);
 	}
 }

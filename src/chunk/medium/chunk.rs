@@ -287,7 +287,15 @@ impl MediumChunk {
 	/// prev/next is NULL in other words.
 	pub fn is_single(&self) -> bool {
 		debug_assert!(self.get_root_addr() != 0);
-		self.prev.is_null() && self.next.is_null()
+		if self.next.is_null() {
+			if self.next.is_null() {
+				true
+			} else {
+				self.next.get_inner_size() == 0
+			}
+		} else {
+			false
+		}
 	}
 
 	/// Get base address of data content in the chunk (base address + header).
