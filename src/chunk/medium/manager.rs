@@ -117,7 +117,7 @@ impl MediumChunkManager {
 		
 		//check for padding
 		if res % align != 0 {
-			res = PaddedChunk::pad(res,PaddedChunk::calc_padding(res,align,size,chunk.get_inner_size()),size);
+			res = PaddedChunk::pad(res,PaddedChunk::calc_padding(res,align,size,chunk.get_inner_size()),chunk.get_inner_size());
 		}
 		
 		//final check
@@ -410,6 +410,7 @@ mod tests
 	use mmsource::dummy::DummyMMSource;
 	use registry::registry::RegionRegistry;
 	use portability::osmem;
+	use chunk::padding;
 
 	#[test]
 	fn build() {
@@ -657,6 +658,8 @@ mod tests
 		assert_eq!(manager.get_inner_size(res),64);
 		assert_eq!(manager.get_total_size(res),64+mem::size_of::<MediumChunk>());
 		assert_eq!(manager.get_requested_size(res),UNSUPPORTED);
+
+		osmem::munmap(ptr,2*1024*1024);
 	}
 
 	#[test]
@@ -688,5 +691,60 @@ mod tests
 
 		//check free
 		assert_eq!(registry.get_segment(ptr).is_none(),true);
+	}
+
+	#[test]
+	fn malloc_align() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let mut i = 8;
+		while i <= 256 {
+			let (res,_zero) = manager.malloc(64, i, false);
+			assert_eq!(res % i, 0);
+			i += 8;
+		}
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn malloc_align_free() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let mut i = 8;
+		while i <= 256 {
+			let (res,_zero) = manager.malloc(64, i, false);
+			assert_eq!(res % i, 0);
+			i += 8;
+			manager.free(res);
+		}
+
+		osmem::munmap(ptr,2*1024*1024);
+	}
+
+	#[test]
+	fn padding() {
+		let mut manager = MediumChunkManager::new(false, None);
+
+		let ptr = osmem::mmap(0,2*1024*1024);
+		manager.fill(ptr, 2*1024*1024,None);
+
+		let (res,_zero) = manager.malloc(64, 256, false);
+		assert_eq!(res % 256, 0);
+		
+		let res_unpad = padding::PaddedChunk::unpad(res);
+		
+		let chunk_size = manager.get_inner_size(res_unpad);
+		let padded_size = manager.get_inner_size(res);
+
+		assert_eq!(chunk_size - padded_size, res - res_unpad);
+
+		osmem::munmap(ptr,2*1024*1024);
 	}
 }

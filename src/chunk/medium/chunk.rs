@@ -287,7 +287,7 @@ impl MediumChunk {
 	/// prev/next is NULL in other words.
 	pub fn is_single(&self) -> bool {
 		debug_assert!(self.get_root_addr() != 0);
-		if self.next.is_null() {
+		if self.prev.is_null() {
 			if self.next.is_null() {
 				true
 			} else {
@@ -391,7 +391,7 @@ mod tests
 		assert_eq!(chunk.get_next().unwrap().get().get_inner_size(), 0);
 		assert_eq!(chunk.get_prev().is_none(),true);
 
-		assert_eq!(chunk.is_single(), false);
+		assert_eq!(chunk.is_single(), true);
 
 		osmem::munmap(ptr, 4096);
 	}
