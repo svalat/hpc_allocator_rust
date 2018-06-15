@@ -6,14 +6,10 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module define the common types to use everywhere 
-///in the code.
+/// This module implement the small chunk management using
+/// a bitmap approach with runs and containers just like what is
+/// done in JeMalloc.
 
-///Definition of an address
-pub type Addr = usize;
-///Definition of a size
-pub type Size = usize;
-///Definition of signed size
-pub type SSize = isize;
-///Small size for small chunk management
-pub type SmallSize = u16;
+/// export
+pub mod run;
+pub mod container;

@@ -6,14 +6,16 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This module define the common types to use everywhere 
-///in the code.
+/// A container is there to contain many runs to fit in a macro bloc.
 
-///Definition of an address
-pub type Addr = usize;
-///Definition of a size
-pub type Size = usize;
-///Definition of signed size
-pub type SSize = isize;
-///Small size for small chunk management
-pub type SmallSize = u16;
+//import
+use common::shared::SharedPtrBox;
+
+/// Implement container
+pub struct SmallChunkContainer
+{
+
+}
+
+/// Pointer
+pub type SmallChunkContainerPtr = SharedPtrBox<SmallChunkContainer>;

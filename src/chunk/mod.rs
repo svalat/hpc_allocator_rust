@@ -12,3 +12,4 @@ pub mod dummy;
 pub mod huge;
 pub mod padding;
 pub mod medium;
+pub mod small;
