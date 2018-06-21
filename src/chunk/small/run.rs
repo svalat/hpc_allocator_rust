@@ -13,14 +13,18 @@
 /// behavior. This come from the JeMalloc allocator.
 
 //import
+use common::consts::*;
 use common::types::{Addr,Size,SmallSize};
 use common::shared::SharedPtrBox;
 use common::list::{ListNode,Listable};
+use common::ops;
 use chunk::small::container::SmallChunkContainerPtr;
 use core::mem;
+use portability::arch;
 
 /// Define a macro entry to store up to 64 bits for bitmask
 type MacroEntry = u64;
+type MacroEntryPtr = SharedPtrBox<MacroEntry>;
 
 /// consts
 const SMALL_RUN_SIZE: usize = 4096;
@@ -32,9 +36,9 @@ const STORAGE_SIZE: usize = STORAGE_ENTRIES * MACRO_ENTRY_SIZE;
 
 /// define a run
 pub struct SmallChunkRun {
+	list_node: ListNode,//this should be first or fix listable impl code
     data:[MacroEntry; STORAGE_ENTRIES],
     container: SmallChunkContainerPtr,
-    listNode: ListNode,
     cnt_alloc: SmallSize,
     skiped_size: SmallSize,
     splitting: SmallSize,
@@ -46,93 +50,235 @@ pub type SmallChunkRunPtr = SharedPtrBox<SmallChunkRun>;
 
 /// Implement
 impl SmallChunkRun {
-    pub fn setup(addr: Addr,skipedSize: SmallSize, splitting: SmallSize, container: SmallChunkContainerPtr) -> SmallChunkRunPtr {
-        unimplemented!();
+    pub fn setup(addr: Addr,skiped_size: SmallSize, splitting: SmallSize, container: SmallChunkContainerPtr) -> SmallChunkRunPtr {
+        let mut cur = SmallChunkRunPtr::new_addr(addr);
+
+		cur.cnt_alloc = 0;
+		cur.skiped_size = (ops::up_to_power_of_2(skiped_size as usize, MACRO_ENTRY_SIZE as usize) / MACRO_ENTRY_SIZE as usize) as u16;
+		cur.splitting = splitting;
+		cur.bitmap_entries = 0;
+		cur.container = container;
+		if splitting > 0 {
+			cur.set_splitting(splitting);
+		}
+
+		cur
     }
 
-    pub fn set_splitting(size: SmallSize) {
-        unimplemented!();
+    pub fn set_splitting(&mut self,splitting: SmallSize) {
+        //errors
+		debug_assert!(splitting as usize <= STORAGE_SIZE);
+		if self.cnt_alloc != 0 {
+			panic!("Cannot change the size of non empty SmallChunkRun.");
+		}
+		
+		//trivial
+		if splitting == 0 {
+			debug_assert!(self.splitting > 0);
+			self.splitting = 0;
+			return;
+		}
+		
+		//setup size
+		self.splitting = splitting;
+		
+		//calc bitmap entries
+		let bitmap_real_entries = STORAGE_SIZE / splitting as usize;
+		self.bitmap_entries = ops::up_to_power_of_2(bitmap_real_entries as usize,MACRO_ENTRY_BITS) as u16;
+		
+		//calc skiped entries
+		let skiped_entries = self.get_rounded_nb_entries(self.skiped_size * MACRO_ENTRY_SIZE as u16);
+		
+		//calc nb entries masked by bitmap storage
+		let bitmap_size = self.bitmap_entries / 8;
+		let bitmap_hidden_entries = self.get_rounded_nb_entries(bitmap_size);
+		
+		//check
+		debug_assert!(self.bitmap_entries > bitmap_hidden_entries - skiped_entries );
+		
+		//clear bitmap with 1 (all free)
+		for i in 0..(bitmap_size as usize / MACRO_ENTRY_SIZE) {
+			self.set_macro_entry(i as u16,MacroEntry::max_value());
+		}
+		
+		//mark skiped entries and bitmap part
+		for i in 0..(skiped_entries + bitmap_hidden_entries) {
+			self.set_bit_status_zero(i);
+		}
+		
+		//mark last bits to 0
+		for i in bitmap_real_entries..self.bitmap_entries as usize {
+			self.set_bit_status_zero(i as u16);
+		}
     }
 
-    pub fn is_empty() -> bool {
-        unimplemented!();
+    pub fn is_empty(&self) -> bool {
+        self.cnt_alloc == 0
     }
 
-    pub fn is_full() -> bool {
-        unimplemented!();
+    pub fn is_full(&self) -> bool {
+        debug_assert!(self.splitting > 0);
+		let macro_entries = self.bitmap_entries / MACRO_ENTRY_BITS as u16;
+		for i in 0..macro_entries {
+			if self.get_macro_entry(i) != 0 {
+				return false;
+			}
+		}
+		return true;
     }
 
-    pub fn malloc(size: Size, align: Size, zero_filled: bool) -> (Addr,bool) {
-        unimplemented!();
+    pub fn malloc(&mut self,size: Size, align: Size, zero_filled: bool) -> (Addr,bool) {
+        //check size
+		if size > self.splitting as usize {
+			panic!("SmallChunkRun only support allocation smaller than the splitting size.");
+		}
+		if size < self.splitting as usize / 2 {
+			//TODO this sould be warning
+			panic!("Caution, you allocate chunk in SmallChunkRun with size less than halfe of the quantum size.");
+		}
+		debug_assert!(self.splitting as usize % align == 0);
+		
+		//search first bit to one (availble free bloc)
+		let macro_entries = self.bitmap_entries / MACRO_ENTRY_BITS as u16;
+		for i in 0..macro_entries {
+			//if get one bit to 1, it contain free elements
+			let entry = self.get_macro_entry(i);
+			if entry != 0 {
+				//search the first bit to one
+				let id = arch::fast_log_2(entry as usize) as u16;
+				debug_assert!(id < MACRO_ENTRY_BITS as u16);
+				let id = id + i * MACRO_ENTRY_BITS as u16;
+				debug_assert!(self.get_bit_status(id) == true);
+				self.set_bit_status_zero(id);
+				debug_assert!(self.get_bit_status(id) == false);
+				self.cnt_alloc += 1;
+				let base_addr = (&self.data) as * const MacroEntry as Addr;
+				let addr = base_addr + self.splitting as usize * id as usize;
+				return (addr,false);
+			}
+		}
+		
+		//didn't not find free memory
+		return (0,zero_filled);
     }
 
-    pub fn free(ptr: Addr) {
-        unimplemented!();
+    pub fn free(&mut self,ptr: Addr) {
+        //compute bit position
+		//TODO maybe assume
+		debug_assert!(self.contain(ptr));
+
+		//calc bit position
+		let base_addr = (&self.data) as * const MacroEntry as Addr;
+		let delta = ptr - base_addr;
+		let bitpos = (delta / self.splitting as usize) as u16;
+
+		//check current status
+		debug_assert!(self.get_bit_status(bitpos) == false);
+
+		//mark as free
+		self.set_bit_status_one(bitpos);
+		
+		//update counter
+		self.cnt_alloc -= 1;
     }
 
-    pub fn get_inner_size(ptr: Addr) -> Size {
-        unimplemented!();
+    pub fn get_inner_size(&self,ptr: Addr) -> Size {
+        debug_assert!(self.contain(ptr));
+		return self.splitting as Size;
     }
 
-    pub fn get_requested_size(ptr: Addr)-> Size {
-        unimplemented!();
+    pub fn get_requested_size(&self,ptr: Addr)-> Size {
+		debug_assert!(self.contain(ptr));
+        return UNSUPPORTED;
     }
 
-    pub fn get_total_size(ptr: Addr) -> Size {
-        unimplemented!();
+    pub fn get_total_size(&self,ptr: Addr) -> Size {
+        debug_assert!(self.contain(ptr));
+		return self.splitting as Size;
     }
 
-    pub fn get_splitting() -> SmallSize {
-        unimplemented!();
+    pub fn get_splitting(&self) -> SmallSize {
+        return self.splitting;
     }
 
-    pub fn realloc(ptr: Addr, size: Size) -> Addr {
-        unimplemented!();
+    pub fn realloc(&self,ptr: Addr, size: Size) -> Addr {
+        if size > self.splitting as usize {
+			panic!("Realloc isn't supported in SmammChunkRun.");
+		}
+		return ptr;
     }
 
-    pub fn contain(ptr: Addr) -> bool {
-        unimplemented!();
+    pub fn contain(&self,ptr: Addr) -> bool {
+        let base_addr = (&self.data) as * const MacroEntry as Addr;
+		return ptr >= base_addr+self.skiped_size as usize+self.bitmap_entries as usize/MACRO_ENTRY_BITS as usize && ptr < base_addr + STORAGE_SIZE;
     }
 
-    pub fn get_container() -> SmallChunkContainerPtr {
-        unimplemented!();
+    pub fn get_container(&self) -> SmallChunkContainerPtr {
+        self.container.clone()
     }
 
-    fn set_bit_status_one(id: SmallSize) {
-        unimplemented!();
+    fn set_bit_status_one(&mut self,id: SmallSize) {
+        let value = self.get_macro_entry_mut(id);
+		*value |= (1 as MacroEntry) << (id as usize & MACRO_ENTRY_MASK as usize);
     }
 
-    fn set_bit_status_zero(id: SmallSize) {
-        unimplemented!();
+    fn set_bit_status_zero(&mut self,id: SmallSize) {
+        let value = self.get_macro_entry_mut(id);
+		*value &= !((1 as MacroEntry) << (id as usize & MACRO_ENTRY_MASK as usize));
     }
 
-    fn get_bit_status(id: SmallSize) {
-        unimplemented!();
+    fn get_bit_status(&self,id: SmallSize) -> bool {
+        let value = self.get_macro_entry(id);
+		return (value & ((1 as MacroEntry) << (id as usize & MACRO_ENTRY_MASK as usize))) != 0;
     }
 
-    fn get_rounded_nb_entry(size: SmallSize) -> SmallSize {
-        unimplemented!();
+    fn get_rounded_nb_entries(&self,size: SmallSize) -> SmallSize {
+        let entries = size / self.splitting;
+		if entries * self.splitting != size {
+			return entries + 1;
+		} else {
+			return entries;
+		}
     }
 
-    fn get_macro_entry(id: SmallSize) -> * const MacroEntry {
-        unimplemented!();
+    fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
+        &mut self.data[id as usize]
+    }
+
+	fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
+		self.data[id as usize] = value;
+	}
+
+	fn get_macro_entry(&self,id: SmallSize) -> MacroEntry {
+        self.data[id as usize]
     }
 }
 
 impl Listable<SmallChunkRun> for SmallChunkRun {
 	fn get_list_node<'a>(&'a self) -> &'a ListNode {
-        unimplemented!();
+        return &self.list_node;
     }
 
 	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode {
-        unimplemented!();
+        return &mut self.list_node;
     }
 
 	fn get_from_list_node<'a>(elmt: * const ListNode) -> * const SmallChunkRun {
-        unimplemented!();
+        return elmt as Addr as * const SmallChunkRun
     }
 
 	fn get_from_list_node_mut<'a>(elmt: * mut ListNode) -> * mut SmallChunkRun {
-        unimplemented!();
+        return elmt as Addr as * mut SmallChunkRun
     }
+}
+
+#[cfg(test)]
+mod tests
+{
+	use core::mem;
+
+	#[test]
+	fn tpye_check() {
+		assert_eq!(mem::size_of::<u64>(), mem::size_of::<usize>());
+	}
 }
