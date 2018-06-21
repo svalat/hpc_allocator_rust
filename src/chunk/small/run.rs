@@ -31,7 +31,7 @@ const SMALL_RUN_SIZE: usize = 4096;
 const MACRO_ENTRY_SIZE: usize = mem::size_of::<MacroEntry>();
 const MACRO_ENTRY_BITS: usize = (8 * MACRO_ENTRY_SIZE);
 const MACRO_ENTRY_MASK: usize = MACRO_ENTRY_SIZE - 1;
-const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 4;
+const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 6;
 const STORAGE_SIZE: usize = STORAGE_ENTRIES * MACRO_ENTRY_SIZE;
 
 /// define a run
@@ -242,7 +242,7 @@ impl SmallChunkRun {
     }
 
     fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
-        &mut self.data[id as usize]
+        &mut self.data[self.skiped_size as usize + id as usize / MACRO_ENTRY_BITS as usize]
     }
 
 	fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
@@ -276,9 +276,121 @@ impl Listable<SmallChunkRun> for SmallChunkRun {
 mod tests
 {
 	use core::mem;
+	use chunk::small::run::*;
+	use portability::osmem;
 
 	#[test]
-	fn tpye_check() {
+	fn type_check() {
 		assert_eq!(mem::size_of::<u64>(), mem::size_of::<usize>());
+		assert_eq!(SMALL_RUN_SIZE,mem::size_of::<SmallChunkRun>());
+	}
+
+	#[test]
+	fn constructor_1() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let run = SmallChunkRun::setup(ptr, 0, 0, container);
+		assert_eq!(0,run.get_splitting());
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn constructor_2() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let run = SmallChunkRun::setup(ptr, 0, 16, container);
+		assert_eq!(16,run.get_splitting());
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn get_inner_size() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		let (p,_) = run.malloc(16,16,false);
+		assert_eq!(16,run.get_inner_size(p));
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn get_total_size() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		let (p,_) = run.malloc(16,16,false);
+		assert_eq!(16,run.get_total_size(p));
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn set_splitting() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 0, container);
+		assert_eq!(0, run.get_splitting());
+		run.set_splitting(16);
+		assert_eq!(16, run.get_splitting());
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn set_splitting_non_multiple() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 0, container);
+		assert_eq!(0, run.get_splitting());
+		run.set_splitting(15);
+		assert_eq!(15, run.get_splitting());
+		while run.malloc(15,15,false).0 != NULL {};
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn malloc_1() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		let (p,_) = run.malloc(16,16,false);
+		assert!(p != NULL);
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn malloc_2() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		let (p,_) = run.malloc(16,16,false);
+		assert!(p != NULL);
+		let (p2,_) = run.malloc(16,16,false);
+		assert!(p != p2);
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn free() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		let (p,_) = run.malloc(16,16,false);
+		run.free(p);
+		assert!(p != NULL);
+		let (p2,_) = run.malloc(16,16,false);
+		assert!(p == p2);
+		osmem::munmap(ptr, 4096);
+	}
+
+	#[test]
+	fn full() {
+		let ptr = osmem::mmap(0, 4096);
+		let container = SmallChunkContainerPtr::new_null();
+		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
+		
+		let mut cnt = 0;
+		while run.malloc(16,16,false).0 != NULL {cnt += 1;};
+		assert_eq!(SMALL_RUN_SIZE/16 - 4,cnt);
+
+		osmem::munmap(ptr, 4096);
 	}
 }
