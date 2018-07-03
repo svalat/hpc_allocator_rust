@@ -27,7 +27,7 @@ type MacroEntry = u64;
 type MacroEntryPtr = SharedPtrBox<MacroEntry>;
 
 /// consts
-const SMALL_RUN_SIZE: usize = 4096;
+pub const SMALL_RUN_SIZE: usize = 4096;
 const MACRO_ENTRY_SIZE: usize = mem::size_of::<MacroEntry>();
 const MACRO_ENTRY_BITS: usize = (8 * MACRO_ENTRY_SIZE);
 const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 6;
@@ -67,6 +67,7 @@ impl SmallChunkRun {
 		cur.splitting = splitting;
 		cur.bitmap_entries = 0;
 		cur.container = container;
+        cur.list_node = ListNode::new();
 		if splitting > 0 {
 			cur.set_splitting(splitting);
 		}
