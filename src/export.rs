@@ -42,7 +42,8 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 // for a bare-bones hello world. These are normally
 // provided by libstd.
 #[lang = "eh_personality"] 
-extern fn eh_personality() {}
+#[no_mangle]
+pub extern fn eh_personality() {}
 
 #[panic_implementation]
 fn panic(_info: &PanicInfo) -> ! {
@@ -52,9 +53,4 @@ fn panic(_info: &PanicInfo) -> ! {
 #[lang = "eh_unwind_resume"]
 #[no_mangle]
 pub extern fn rust_eh_unwind_resume() {
-}
-
-#[no_mangle]
-pub extern fn rust_begin_unwind() {
-
 }

@@ -53,6 +53,12 @@ pub type SmallChunkRunPtr = SharedPtrBox<SmallChunkRun>;
 
 /// Implement
 impl SmallChunkRun {
+    /// Setup a new small chunk runner by storing it at the given address.
+    /// @param addr Define the base address at which to store the small chunk runner.
+    /// @param skiped_size Define the memory size we need to skip from addr to start allocating object. This
+    /// is usefull to skip the macro bloc heaers used by the allocator region registry.
+    /// @param splitting Define which max size bloc we manage in this allocator
+    /// @param container Pointer to the parent container.
     pub fn setup(addr: Addr,skiped_size: SmallSize, splitting: SmallSize, container: SmallChunkContainerPtr) -> SmallChunkRunPtr {
         let mut cur = SmallChunkRunPtr::new_addr(addr);
 
@@ -68,6 +74,8 @@ impl SmallChunkRun {
 		cur
     }
 
+    /// Configure the splitting size, this can only be done if the run is empty.
+    /// It will configure wich max size the run manage.    
     pub fn set_splitting(&mut self,splitting: SmallSize) {
         //errors
 		debug_assert!(splitting as usize <= STORAGE_SIZE);
@@ -115,10 +123,12 @@ impl SmallChunkRun {
 		}
     }
 
+    /// Check if the run is empty and contain no allocated segments.
     pub fn is_empty(&self) -> bool {
         self.cnt_alloc == 0
     }
 
+    /// Check if the run is full and cannot allocate more segements.
     pub fn is_full(&self) -> bool {
         debug_assert!(self.splitting > 0);
 		let macro_entries = self.bitmap_entries / MACRO_ENTRY_BITS as u16;
@@ -130,6 +140,11 @@ impl SmallChunkRun {
 		return true;
     }
 
+    /// Allocate a new segement for the given size which must be smaller or equal
+    /// to the splitting size.
+    /// @param size Define the size of the chunk we want to allocated
+    /// @param align Define the alignement we want, which should be equal to splitting size currently.
+    /// @param zero_filled Define if we want a zero filled segment or not
     pub fn malloc(&mut self,size: Size, align: Size, zero_filled: bool) -> (Addr,bool) {
         //check size
 		if size > self.splitting as usize {
@@ -165,6 +180,7 @@ impl SmallChunkRun {
 		return (0,zero_filled);
     }
 
+    /// Free the given segment.
     pub fn free(&mut self,ptr: Addr) {
         //compute bit position
 		//TODO maybe assume
@@ -185,25 +201,38 @@ impl SmallChunkRun {
 		self.cnt_alloc -= 1;
     }
 
+    /// Return the internal size of the segment at given address. For small chunk
+    /// manager this is always exactly the splitting size as is des not have chunk
+    /// headers
     pub fn get_inner_size(&self,ptr: Addr) -> Size {
         debug_assert!(self.contain(ptr));
 		return self.splitting as Size;
     }
 
+    /// Return the requested size of the segment at given address.
     pub fn get_requested_size(&self,ptr: Addr)-> Size {
 		debug_assert!(self.contain(ptr));
         return UNSUPPORTED;
     }
 
+    /// Return the total size of the segment at given address. For small chunk
+    /// manager this is always exactly the splitting size as is des not have chunk
+    /// headers.
     pub fn get_total_size(&self,ptr: Addr) -> Size {
         debug_assert!(self.contain(ptr));
 		return self.splitting as Size;
     }
 
+    /// Return the current splitting in use.
     pub fn get_splitting(&self) -> SmallSize {
         return self.splitting;
     }
 
+    /// Reallocate a segment at the given address. In small chunk manager
+    /// this function does not do anything but returning the current address
+    /// as we manage only chunks we size matching with splitting size.
+    /// So either it fit and we can let it here either we cannot do anything
+    /// but panicking.
     pub fn realloc(&self,ptr: Addr, size: Size) -> Addr {
         if size > self.splitting as usize {
 			panic!("Realloc isn't supported in SmammChunkRun.");
@@ -211,36 +240,47 @@ impl SmallChunkRun {
 		return ptr;
     }
 
+    /// Check if the current runner contain the given address.
     pub fn contain(&self,ptr: Addr) -> bool {
         let base_addr = (&self.data) as * const MacroEntry as Addr;
 		return ptr >= base_addr+self.skiped_size as usize+self.bitmap_entries as usize/MACRO_ENTRY_BITS as usize && ptr < base_addr + STORAGE_SIZE;
     }
 
+    /// Return the current container.
     pub fn get_container(&self) -> SmallChunkContainerPtr {
         self.container.clone()
     }
 
+    /// Set the bit to one to mark the related chunk as freed and ready for resuse.
+    /// @param id Id of the bit we want to set from the base address of the runner.
     fn set_bit_status_one(&mut self,id: SmallSize) {
+        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
         let mid = id as usize / MACRO_ENTRY_BITS;
         let bit = id as usize % MACRO_ENTRY_BITS;
         let value = self.get_macro_entry_mut(mid as u16);
 		*value |= (1 as MacroEntry) << (bit);
     }
 
+    /// Set the bit to zero to mark the related chunk as allocated and not ready for resuse.
+    /// @param id Id of the bit we want to set from the base address of the runner.
     fn set_bit_status_zero(&mut self,id: SmallSize) {
+        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
         let mid = id as usize / MACRO_ENTRY_BITS;
         let bit = id as usize % MACRO_ENTRY_BITS;
         let value = self.get_macro_entry_mut(mid as u16);
 		*value &= !((1 as MacroEntry) << (bit));
     }
 
+    /// Retrurn the bit status for the given chunk ID.
     fn get_bit_status(&self,id: SmallSize) -> bool {
+        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
         let mid = id as usize / MACRO_ENTRY_BITS;
         let bit = id as usize % MACRO_ENTRY_BITS;
         let value = self.get_macro_entry(mid as u16);
 		return (value & ((1 as MacroEntry) << (bit as usize))) != 0;
     }
 
+    /// Round number of entries to take in account mutiples.
     fn get_rounded_nb_entries(&self,size: SmallSize) -> SmallSize {
         let entries = size / self.splitting;
 		if entries * self.splitting != size {
@@ -250,15 +290,21 @@ impl SmallChunkRun {
 		}
     }
 
+    /// Retyrn the requested macro entry in mutable ref way to modity
     fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
+        assert!((id as usize) < STORAGE_ENTRIES);
         &mut self.data[id as usize]
     }
 
-	fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
-		self.data[id as usize] = value;
+    /// Set the macro entry.
+    fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
+		assert!((id as usize) < STORAGE_ENTRIES);
+        self.data[id as usize] = value;
 	}
 
+    /// Return the requested macro entry value.
 	fn get_macro_entry(&self,id: SmallSize) -> MacroEntry {
+        assert!((id as usize) < STORAGE_ENTRIES);
         self.data[id as usize]
     }
 }
