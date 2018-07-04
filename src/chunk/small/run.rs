@@ -96,20 +96,20 @@ impl SmallChunkRun {
 		
 		//calc bitmap entries
 		let bitmap_real_entries = STORAGE_SIZE / splitting as usize;
-		self.bitmap_entries = ops::up_to_power_of_2(bitmap_real_entries as usize,MACRO_ENTRY_BITS) as u16;
-		
+		self.bitmap_entries = ops::up_to_power_of_2(bitmap_real_entries as usize, MACRO_ENTRY_BITS) as u16;
+        
 		//calc skiped entries
 		let skiped_entries = self.get_rounded_nb_entries(self.skiped_size * MACRO_ENTRY_SIZE as u16);
 		
-		//calc nb entries masked by bitmap storage
+		//calc nb entries masked by bitmap & struct field storage
 		let bitmap_size = self.bitmap_entries / 8;
 		let bitmap_hidden_entries = self.get_rounded_nb_entries(bitmap_size);
-		
-		//check
-		debug_assert!(self.bitmap_entries > bitmap_hidden_entries - skiped_entries );
+
+        //check
+        assert!(self.bitmap_entries > bitmap_hidden_entries + skiped_entries);
 		
 		//clear bitmap with 1 (all free)
-		for i in 0..(bitmap_size as usize / MACRO_ENTRY_SIZE) {
+		for i in 0..(bitmap_size / MACRO_ENTRY_SIZE as u16) {
 			self.set_macro_entry(i as u16,MacroEntry::max_value());
 		}
 		
@@ -117,11 +117,11 @@ impl SmallChunkRun {
 		for i in 0..(skiped_entries + bitmap_hidden_entries) {
 			self.set_bit_status_zero(i);
 		}
-		
-		//mark last bits to 0
-		for i in bitmap_real_entries..self.bitmap_entries as usize {
-			self.set_bit_status_zero(i as u16);
-		}
+
+        //mark last bits to 0
+	    for i in bitmap_real_entries as u16..self.bitmap_entries as u16 {
+		    self.set_bit_status_zero(i);
+        }
     }
 
     /// Check if the run is empty and contain no allocated segments.
@@ -294,19 +294,19 @@ impl SmallChunkRun {
     /// Retyrn the requested macro entry in mutable ref way to modity
     fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
         assert!((id as usize) < STORAGE_ENTRIES);
-        &mut self.data[id as usize]
+        &mut self.data[self.skiped_size as usize + id as usize]
     }
 
     /// Set the macro entry.
     fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
 		assert!((id as usize) < STORAGE_ENTRIES);
-        self.data[id as usize] = value;
+        self.data[self.skiped_size as usize + id as usize] = value;
 	}
 
     /// Return the requested macro entry value.
 	fn get_macro_entry(&self,id: SmallSize) -> MacroEntry {
         assert!((id as usize) < STORAGE_ENTRIES);
-        self.data[id as usize]
+        self.data[self.skiped_size as usize + id as usize]
     }
 }
 

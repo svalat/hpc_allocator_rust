@@ -15,8 +15,10 @@ use common::list::{List,ListNode,Listable};
 use chunk::small::run::{SMALL_RUN_SIZE,SmallChunkRun,SmallChunkRunPtr};
 use common::ops;
 use common::consts::*;
+use core::mem;
 
-/// Implement container
+/// Implement container which is used to store all the runs obtained by splitting
+/// a macro bloc insto runs (segs of 4K thesemve splitted for given small sizes.)
 pub struct SmallChunkContainer
 {
     list_node: ListNode,
@@ -26,6 +28,9 @@ pub struct SmallChunkContainer
 }
 
 impl SmallChunkContainer {
+    /// Initizalize a new small run container onto the given allocated segment.
+    /// It setup the headers and make the splitting to generate free runs and keep
+    /// track of them.
     pub fn setup(ptr: Addr, size: Size) -> SmallChunkContainerPtr {
         let mut cur = SmallChunkContainerPtr::new_addr(ptr);
         cur.list_node = ListNode::new();
@@ -36,10 +41,15 @@ impl SmallChunkContainer {
         return cur;
     }
 
+    /// Check if the container is empty an do not contain anymore empty runs.
+    /// This is used by the allocator to know if we need to go to another
+    /// container to get free runs.
     pub fn is_empty(&self,) -> bool {
         self.reserved_runs == 0
     }
 
+    /// Register an empty run into the container to latter reuse it or wait
+    /// all the runs become free again to free the container itself.
     pub fn reg_empty(&mut self,run: SmallChunkRunPtr) {
         let local = self as * const SmallChunkContainer as Addr;
         debug_assert!(!run.is_null());
@@ -54,6 +64,7 @@ impl SmallChunkContainer {
         }
     }
 
+    /// Request and empty run, can get None if not available.
     pub fn get_empty_run(&mut self) -> Option<SmallChunkRunPtr> {
         let res = self.empty.pop_front();
 
@@ -65,9 +76,10 @@ impl SmallChunkContainer {
         res
     }
 
+    /// Apply the splitting by creating the runs and adding them to the free list.
     pub fn setup_splitting(&mut self) {
         //vars
-        let addr = self as * const SmallChunkContainer as Addr;
+        let addr = (self as * const SmallChunkContainer as Addr) + mem::size_of::<SmallChunkContainer>();
         let ptr_start = ops::ceil_to_power_of_2(addr, SMALL_RUN_SIZE);
         let ptr_end = ops::ceil_to_power_of_2(addr+self.size, SMALL_RUN_SIZE);
         let cnt = (ptr_end - ptr_start) / SMALL_RUN_SIZE;
@@ -116,3 +128,99 @@ impl Listable<SmallChunkContainer> for SmallChunkContainer {
 
 /// Pointer
 pub type SmallChunkContainerPtr = SharedPtrBox<SmallChunkContainer>;
+
+#[cfg(test)]
+mod tests
+{
+	use chunk::small::container::*;
+	use portability::osmem;
+
+    #[test]
+    fn setup() {
+        let ptr = osmem::mmap(0, 2*1024*1024);
+
+        let container = SmallChunkContainer::setup(ptr, 2*1024*1024);
+        assert_eq!(container.is_empty(), true);
+
+        osmem::munmap(ptr, 2*1024*1024);
+    }
+
+    #[test]
+    fn is_empty() {
+        let ptr = osmem::mmap(0, 2*1024*1024);
+
+        let mut container = SmallChunkContainer::setup(ptr, 2*1024*1024);
+        assert_eq!(container.is_empty(), true);
+
+        let run = container.get_empty_run();
+        assert_eq!(run.is_some(), true);
+        assert_eq!(container.is_empty(), false);
+
+        container.reg_empty(run.unwrap());
+        assert_eq!(container.is_empty(), true);
+
+        osmem::munmap(ptr, 2*1024*1024);
+    }
+
+    #[test]
+    fn get_empty_run_1() {
+        let ptr = osmem::mmap(0, 2*1024*1024);
+
+        let mut container = SmallChunkContainer::setup(ptr, 2*1024*1024);
+        assert_eq!(container.is_empty(), true);
+
+        let run1 = container.get_empty_run();
+        assert_eq!(run1.is_some(), true);
+
+        let run2 = container.get_empty_run();
+        assert_eq!(run2.is_some(), true);
+
+        assert!(run1.unwrap().get_addr() != run2.unwrap().get_addr());
+
+        osmem::munmap(ptr, 2*1024*1024);
+    }
+
+    #[test]
+    fn get_empty_run_2() {
+        let ptr = osmem::mmap(0, 2*1024*1024);
+
+        let mut container = SmallChunkContainer::setup(ptr, 2*1024*1024);
+        assert_eq!(container.is_empty(), true);
+
+        let mut cnt = 0;
+        loop {
+            let run = container.get_empty_run();
+            if run.is_none() {
+                break;
+            } else {
+                cnt += 1;
+            }
+        }
+
+        assert_eq!(2*1024*1024 / SMALL_RUN_SIZE, cnt);
+ 
+        osmem::munmap(ptr, 2*1024*1024);
+    }
+
+    #[test]
+    fn get_empty_run_3() {
+        let ptr = osmem::mmap(0, 2*1024*1024);
+
+        let mut container = SmallChunkContainer::setup(ptr, 2*1024*1024);
+        assert_eq!(container.is_empty(), true);
+
+        let mut run = container.get_empty_run().unwrap();
+        run.set_splitting(16);
+
+        loop {
+            let (c,_) = run.malloc(16,16,false);
+            if c != NULL {
+                assert!(c >= ptr + mem::size_of::<SmallChunkContainer>());
+            } else {
+                break;
+            }
+        }
+        
+        osmem::munmap(ptr, 2*1024*1024);
+    }
+}
