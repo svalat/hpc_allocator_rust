@@ -234,7 +234,48 @@ impl SmallChunkManager {
     }
 
     fn upate_active_run_for_size(handler: &mut SmallChunkManagerLocked, size_class: usize) -> Option<SmallChunkRunPtr> {
-        unimplemented!();
+       /* //errors
+        debug_assert!(size_class >= 0 && size_class < NB_SIZE_CLASS);
+        if handler.activ_runs[size_class].is_some() {
+            debug_assert!(handler.activ_runs[size_class].is_full());
+        }
+
+        //search in list
+        let mut run = None;
+        for (SmallChunkRunList::Iterator it = inUse[sizeClass].begin() ; it != inUse[sizeClass].end() ; ++it)
+        for mut it in handler.in_use[size_class].iter() {
+            if it.is_full() == false {
+                run = Some(&mut it);
+                List::remove(it);
+                break;
+            }
+        }
+        
+        //if have not, try in empty list
+        if run.is_none() {
+            run = findEmptyRun();
+            //need to refill
+            if (run == NULL)
+            {
+                refill();
+                run = findEmptyRun();
+            }
+            //setup splitting in run
+            if (run != NULL)
+                run->setSplitting(SMALL_SIZE_CLASSES[sizeClass]);
+        }
+
+        //if have one
+        if (run != NULL)
+        {
+            //insert in FIFO
+            if (activRuns[sizeClass] != NULL)
+                inUse[sizeClass].putLast(activRuns[sizeClass]);
+            activRuns[sizeClass] = run;
+        }
+
+        //return it
+        return run;*/
     }
 
     fn get_activ_run_for_size(&self,size_class: usize) -> Option<SmallChunkRun> {
