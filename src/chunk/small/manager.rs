@@ -13,17 +13,16 @@
 use portability::spinlock::SpinLock;
 use common::traits::{ChunkManager,ChunkManagerPtr,MemorySourcePtr};
 use registry::registry::RegionRegistry;
-use common::types::{Addr,Size,SSize};
+use common::types::{Addr,Size};
 use common::consts::*;
 use common::ops;
-use chunk::padding::PaddedChunk;
 use common::shared::SharedPtrBox;
 use core::mem;
 use registry::segment::RegionSegment;
 use portability::libc;
 use common::list::List;
-use chunk::small::run::{SmallChunkRun,SmallChunkRunPtr};
-use chunk::small::container::{SmallChunkContainer,SmallChunkContainerPtr};
+use chunk::small::run::{SmallChunkRun,SmallChunkRunPtr,SMALL_RUN_SIZE};
+use chunk::small::container::{SmallChunkContainer};
 
 //consts
 const NB_SIZE_CLASS: usize = 10;
@@ -89,7 +88,7 @@ impl SmallChunkManager {
 
             //get active run for class
             {
-                let mut run = &mut (handler.active_runs[size_class]);
+                let run = &mut (handler.active_runs[size_class]);
 
                 //try to alloc
                 match run {
@@ -99,7 +98,7 @@ impl SmallChunkManager {
             }
 
             if res == NULL {
-                let mut run = Self::upate_active_run_for_size(&mut handler,size_class);
+                let run = Self::upate_active_run_for_size(&mut handler,size_class,ChunkManagerPtr::new_ref(self));
                 match run {
                     Some(mut run) => res = run.malloc(size,align,zero_filled).0,
                     None => {},
@@ -118,7 +117,33 @@ impl SmallChunkManager {
 		self.locked.lock().mmsource = mmsource;
 	}
 
-	fn fill(&mut self,ptr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>, lock:bool) {
+	fn refill(handler: &mut SmallChunkManagerLocked,manager:ChunkManagerPtr) {
+		//trivial
+		if handler.mmsource.is_none() {
+			return;
+		}
+		
+		//request mem
+		let (segment,_) = handler.mmsource.as_mut().unwrap().map(REGION_SPLITTING-mem::size_of::<RegionSegment>(),false,Some(manager));
+		if segment.is_null() {
+			return;
+		}
+		debug_assert!(segment.get_total_size() == REGION_SPLITTING);
+		
+		//get inner segment
+		let ptr = segment.get_content_addr();
+		
+		//build chunk
+		let inner_size = segment.get_inner_size();
+		
+		//setup run container
+        let container = SmallChunkContainer::setup(ptr,inner_size);
+
+		//register to list
+		handler.containers.push_back(container);
+	}
+
+	fn fill(&mut self,ptr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>) {
 		//errors
         debug_assert!(ptr != NULL);
 
@@ -177,7 +202,7 @@ impl SmallChunkManager {
         return res;
     }
 
-    fn mark_run_as_free(&mut self, mut run: SmallChunkRunPtr) {
+    fn mark_run_as_free(handler: &mut SmallChunkManagerLocked, mut run: SmallChunkRunPtr) {
         //errors
         debug_assert!(run.is_some());
         debug_assert!(run.is_empty());
@@ -186,43 +211,37 @@ impl SmallChunkManager {
         let mut container = run.get_container();
         debug_assert!(container.is_some());
 
-        //take lock
-        {
-            //take
-            let mut handler = self.locked.optional_lock(self.use_lock);
+		//check current usage
+		let size_class = Self::get_size_class(run.get_splitting() as usize);
 
-            //check current usage
-            let size_class = Self::get_size_class(run.get_splitting() as usize);
-
-            //if
-            match handler.active_runs[size_class] {
-                Some(ref mut r) => {
-                    if r.get_addr() == run.get_addr() {
-                        *r = run.clone();
-                    } else {
-                        List::remove(&mut run);
-                    }
-                },
-                None => {
-                    List::remove(&mut run);
-                }
-            }
-            
-            //register as free
-            run.set_splitting(0);
-            container.reg_empty(run);
-            
-            //if container is empty, remove it
-            if container.is_empty() && handler.mmsource.is_some() {
-                List::remove(&mut container);
-                handler.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
-            }
-        }
+		//if
+		match handler.active_runs[size_class] {
+			Some(ref mut r) => {
+				if r.get_addr() == run.get_addr() {
+					*r = run.clone();
+				} else {
+					List::remove(&mut run);
+				}
+			},
+			None => {
+				List::remove(&mut run);
+			}
+		}
+		
+		//register as free
+		run.set_splitting(0);
+		container.reg_empty(run);
+		
+		//if container is empty, remove it
+		if container.is_empty() && handler.mmsource.is_some() {
+			List::remove(&mut container);
+			handler.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
+		}
     }
 
-    fn find_empty_run(&mut self) -> Option<SmallChunkRunPtr> {
+    fn find_empty_run(handler: &mut SmallChunkManagerLocked) -> Option<SmallChunkRunPtr> {
         //search in containers
-        for mut it in self.locked.optional_lock(self.use_lock).containers.iter()
+        for mut it in handler.containers.iter()
         {
             match it.get_empty_run() {
                 Some(res) => {return Some(res)},
@@ -233,19 +252,19 @@ impl SmallChunkManager {
         return None;
     }
 
-    fn upate_active_run_for_size(handler: &mut SmallChunkManagerLocked, size_class: usize) -> Option<SmallChunkRunPtr> {
-       /* //errors
-        debug_assert!(size_class >= 0 && size_class < NB_SIZE_CLASS);
-        if handler.activ_runs[size_class].is_some() {
-            debug_assert!(handler.activ_runs[size_class].is_full());
+    fn upate_active_run_for_size(handler: &mut SmallChunkManagerLocked, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
+        //errors
+        debug_assert!(size_class < NB_SIZE_CLASS);
+        match handler.active_runs[size_class] {
+            Some(ref mut r) => debug_assert!(r.is_full()),
+			None => {},
         }
 
         //search in list
         let mut run = None;
-        for (SmallChunkRunList::Iterator it = inUse[sizeClass].begin() ; it != inUse[sizeClass].end() ; ++it)
-        for mut it in handler.in_use[size_class].iter() {
+        for ref mut it in handler.in_use[size_class].iter() {
             if it.is_full() == false {
-                run = Some(&mut it);
+                run = Some(it.clone());
                 List::remove(it);
                 break;
             }
@@ -253,59 +272,155 @@ impl SmallChunkManager {
         
         //if have not, try in empty list
         if run.is_none() {
-            run = findEmptyRun();
+            run = Self::find_empty_run(handler);
             //need to refill
-            if (run == NULL)
-            {
-                refill();
-                run = findEmptyRun();
+            if run.is_none() {
+                Self::refill(handler,manager);
+                run = Self::find_empty_run(handler);
             }
             //setup splitting in run
-            if (run != NULL)
-                run->setSplitting(SMALL_SIZE_CLASSES[sizeClass]);
+            match run {
+                Some(ref mut r) => r.set_splitting(SMALL_SIZE_CLASSES[size_class] as u16),
+				None => {},
+			}
         }
 
         //if have one
-        if (run != NULL)
-        {
+        if run.is_some() {
             //insert in FIFO
-            if (activRuns[sizeClass] != NULL)
-                inUse[sizeClass].putLast(activRuns[sizeClass]);
-            activRuns[sizeClass] = run;
+			match handler.active_runs[size_class] {
+                Some(ref r) => handler.in_use[size_class].push_back(r.clone()),
+				None => {}
+			}
+
+            handler.active_runs[size_class] = run.clone();
         }
 
         //return it
-        return run;*/
+        return run;
     }
 
-    fn get_activ_run_for_size(&self,size_class: usize) -> Option<SmallChunkRun> {
-        unimplemented!();
-    }
 
-    fn get_run(&self, addr: Addr) -> Option<SmallChunkRunPtr> {
-        unimplemented!();
+    fn get_run(&self, ptr: Addr) -> Option<SmallChunkRunPtr> {
+        //trivial
+		if ptr == NULL {
+			return None;
+		}
+		
+		//round add
+		let run = SmallChunkRunPtr::new_addr(ops::ceil_to_power_of_2(ptr, SMALL_RUN_SIZE));
+		
+		//check 
+		debug_assert!(run.contain(ptr));
+		if run.contain(ptr) {
+			return Some(run);
+		} else {
+			return None;
+		}
     }
 }
 
 impl ChunkManager for SmallChunkManager {
-	fn free(&mut self,addr: Addr) {
-        unimplemented!();
+	fn free(&mut self,ptr: Addr) {
+        //trivial
+		if ptr == NULL {
+			return;
+		}
+		
+		//find small chunk
+		let run = self.get_run(ptr);
+		debug_assert!(run.is_some());
+
+		//if found
+		match run {
+			Some(mut run) => {
+				//lock
+				let mut handler = self.locked.optional_lock(self.use_lock);
+
+				//free
+				run.free(ptr);
+				
+				//if empty move to empty list
+				if run.is_empty() {
+					Self::mark_run_as_free(&mut handler,run);
+				}
+			},
+			None => {},
+		}
 	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
-        unimplemented!();
+        //trivial cases
+		if ptr == NULL {
+			return self.malloc(size,BASIC_ALIGN,false).0;
+		} else if size == 0 {
+			self.free(ptr);
+			return NULL;
+		}
+		
+		//get size classes
+		let old_run = self.get_run(ptr);
+		if old_run.is_none() {
+			panic!("Invalid old pointer for realloc on SmallAllocator cannot proceed to keep data !");
+		}
+		let old_run = old_run.unwrap();
+		let old_class = Self::get_size_class(old_run.get_splitting() as usize);
+		let new_class = Self::get_size_class(size);
+		
+		//if same class, do nothing, otherwise to realloc
+		if new_class == old_class {
+			return ptr;
+		}
+		
+		//alloc, copy, free
+		let (res,_) = self.malloc(size,BASIC_ALIGN,false);
+		if res != NULL {
+			let mut cpy_size = old_run.get_splitting() as usize;
+			if size < cpy_size {
+				cpy_size = size;
+			}
+			libc::memcpy(res,ptr,cpy_size);
+		}
+		self.free(ptr);
+		
+		//ok return the segment
+		return res;
 	}
 
 	fn get_inner_size(&mut self,ptr: Addr) -> Size {
-		unimplemented!();
+		//get the run to request the size
+		let run = self.get_run(ptr);
+		debug_assert!(run.is_some());
+		
+		//case
+		match run {
+			Some(run) => run.get_inner_size(ptr),
+			None => 0,
+		}
 	}
 
     fn get_total_size(&mut self,ptr: Addr) -> Size {
-		unimplemented!();
+		//get the run to request the size
+		let run = self.get_run(ptr);
+		debug_assert!(run.is_some());
+		
+		//case
+		match run {
+			Some(run) => run.get_total_size(ptr),
+			None => 0,
+		}
 	}
 
-    fn get_requested_size(&mut self,_ptr: Addr) -> Size {
-		UNSUPPORTED
+    fn get_requested_size(&mut self,ptr: Addr) -> Size {
+		//get the run to request the size
+		let run = self.get_run(ptr);
+		debug_assert!(run.is_some());
+		
+		//case
+		match run {
+			Some(run) => run.get_requested_size(ptr),
+			None => 0,
+		}
 	}
 	
     fn is_thread_safe(&self) -> bool {
@@ -313,7 +428,11 @@ impl ChunkManager for SmallChunkManager {
 	}
 
     fn remote_free(&mut self,ptr: Addr) {
-		unimplemented!();
+		if self.use_lock {
+			self.free(ptr);
+		} else {
+			panic!("Unsupported remote free without locks.");
+		}
 	}
 
     fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
@@ -325,7 +444,7 @@ impl ChunkManager for SmallChunkManager {
 	}
 
     fn hard_checking(&mut self) {
-        unimplemented!();
+        //TODO
     }
 }
 
