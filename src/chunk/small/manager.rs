@@ -98,7 +98,7 @@ impl SmallChunkManager {
             }
 
             if res == NULL {
-                let run = Self::upate_active_run_for_size(&mut handler,size_class,ChunkManagerPtr::new_ref(self));
+                let run = handler.upate_active_run_for_size(size_class,ChunkManagerPtr::new_ref(self));
                 match run {
                     Some(mut run) => res = run.malloc(size,align,zero_filled).0,
                     None => {},
@@ -115,32 +115,6 @@ impl SmallChunkManager {
 
 	pub fn rebind_mm_source(&mut self,mmsource: Option<MemorySourcePtr>) {
 		self.locked.lock().mmsource = mmsource;
-	}
-
-	fn refill(handler: &mut SmallChunkManagerLocked,manager:ChunkManagerPtr) {
-		//trivial
-		if handler.mmsource.is_none() {
-			return;
-		}
-		
-		//request mem
-		let (segment,_) = handler.mmsource.as_mut().unwrap().map(REGION_SPLITTING-mem::size_of::<RegionSegment>(),false,Some(manager));
-		if segment.is_null() {
-			return;
-		}
-		debug_assert!(segment.get_total_size() == REGION_SPLITTING);
-		
-		//get inner segment
-		let ptr = segment.get_content_addr();
-		
-		//build chunk
-		let inner_size = segment.get_inner_size();
-		
-		//setup run container
-        let container = SmallChunkContainer::setup(ptr,inner_size);
-
-		//register to list
-		handler.containers.push_back(container);
 	}
 
 	fn fill(&mut self,ptr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>) {
@@ -238,68 +212,6 @@ impl SmallChunkManager {
 			handler.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
 		}
     }
-
-    fn find_empty_run(handler: &mut SmallChunkManagerLocked) -> Option<SmallChunkRunPtr> {
-        //search in containers
-        for mut it in handler.containers.iter()
-        {
-            match it.get_empty_run() {
-                Some(res) => {return Some(res)},
-                None => {},
-            }
-        }
-        
-        return None;
-    }
-
-    fn upate_active_run_for_size(handler: &mut SmallChunkManagerLocked, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
-        //errors
-        debug_assert!(size_class < NB_SIZE_CLASS);
-        match handler.active_runs[size_class] {
-            Some(ref mut r) => debug_assert!(r.is_full()),
-			None => {},
-        }
-
-        //search in list
-        let mut run = None;
-        for ref mut it in handler.in_use[size_class].iter() {
-            if it.is_full() == false {
-                run = Some(it.clone());
-                List::remove(it);
-                break;
-            }
-        }
-        
-        //if have not, try in empty list
-        if run.is_none() {
-            run = Self::find_empty_run(handler);
-            //need to refill
-            if run.is_none() {
-                Self::refill(handler,manager);
-                run = Self::find_empty_run(handler);
-            }
-            //setup splitting in run
-            match run {
-                Some(ref mut r) => r.set_splitting(SMALL_SIZE_CLASSES[size_class] as u16),
-				None => {},
-			}
-        }
-
-        //if have one
-        if run.is_some() {
-            //insert in FIFO
-			match handler.active_runs[size_class] {
-                Some(ref r) => handler.in_use[size_class].push_back(r.clone()),
-				None => {}
-			}
-
-            handler.active_runs[size_class] = run.clone();
-        }
-
-        //return it
-        return run;
-    }
-
 
     fn get_run(&self, ptr: Addr) -> Option<SmallChunkRunPtr> {
         //trivial
@@ -445,6 +357,95 @@ impl ChunkManager for SmallChunkManager {
 
     fn hard_checking(&mut self) {
         //TODO
+    }
+}
+
+impl SmallChunkManagerLocked {
+	fn refill(&mut self,manager:ChunkManagerPtr) {
+		//trivial
+		if self.mmsource.is_none() {
+			return;
+		}
+		
+		//request mem
+		let (segment,_) = self.mmsource.as_mut().unwrap().map(REGION_SPLITTING-mem::size_of::<RegionSegment>(),false,Some(manager));
+		if segment.is_null() {
+			return;
+		}
+		debug_assert!(segment.get_total_size() == REGION_SPLITTING);
+		
+		//get inner segment
+		let ptr = segment.get_content_addr();
+		
+		//build chunk
+		let inner_size = segment.get_inner_size();
+		
+		//setup run container
+        let container = SmallChunkContainer::setup(ptr,inner_size);
+
+		//register to list
+		self.containers.push_back(container);
+	}
+
+	fn find_empty_run(&mut self) -> Option<SmallChunkRunPtr> {
+        //search in containers
+        for mut it in self.containers.iter()
+        {
+            match it.get_empty_run() {
+                Some(res) => {return Some(res)},
+                None => {},
+            }
+        }
+        
+        return None;
+    }
+
+    fn upate_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
+        //errors
+        debug_assert!(size_class < NB_SIZE_CLASS);
+        match self.active_runs[size_class] {
+            Some(ref mut r) => debug_assert!(r.is_full()),
+			None => {},
+        }
+
+        //search in list
+        let mut run = None;
+        for ref mut it in self.in_use[size_class].iter() {
+            if it.is_full() == false {
+                run = Some(it.clone());
+                List::remove(it);
+                break;
+            }
+        }
+        
+        //if have not, try in empty list
+        if run.is_none() {
+            run = self.find_empty_run();
+            //need to refill
+            if run.is_none() {
+                self.refill(manager);
+                run = self.find_empty_run();
+            }
+            //setup splitting in run
+            match run {
+                Some(ref mut r) => r.set_splitting(SMALL_SIZE_CLASSES[size_class] as u16),
+				None => {},
+			}
+        }
+
+        //if have one
+        if run.is_some() {
+            //insert in FIFO
+			match self.active_runs[size_class] {
+                Some(ref r) => self.in_use[size_class].push_back(r.clone()),
+				None => {}
+			}
+
+            self.active_runs[size_class] = run.clone();
+        }
+
+        //return it
+        return run;
     }
 }
 
