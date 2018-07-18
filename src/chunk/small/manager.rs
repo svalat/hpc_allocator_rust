@@ -462,14 +462,12 @@ mod tests
 	use mmsource::dummy::DummyMMSource;
 	use registry::registry::RegionRegistry;
 	use portability::osmem;
-	use chunk::padding;	
-	use common::consts::*;
 
 	#[test]
 	fn constructor() {
 		let mmsource = DummyMMSource::new(None);
-		let manager1 = SmallChunkManager::new(true, None);
-		let manager1 = SmallChunkManager::new(true,Some(MemorySourcePtr::new_ref(&mmsource)));
+		let _manager1 = SmallChunkManager::new(true, None);
+		let _manager2 = SmallChunkManager::new(true,Some(MemorySourcePtr::new_ref(&mmsource)));
 	}
 
 	#[test]
@@ -489,6 +487,30 @@ mod tests
 		assert_eq!(ptr, mem+63*16);
 		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
 		assert_eq!(ptr, mem+62*16);
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn malloc_fill_smallest() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem, SMALL_PAGE_SIZE, None);
+		let (ptr,_) = manager.malloc(4, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+63*8);
+		let (ptr,_) = manager.malloc(4, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+62*8);
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn malloc_fill_large() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem, SMALL_PAGE_SIZE, None);
+		let (ptr,_) = manager.malloc(64, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+62*64);
+		let (ptr,_) = manager.malloc(64, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+61*64);
 		osmem::munmap(mem, SMALL_PAGE_SIZE);
 	}
 
@@ -558,7 +580,7 @@ mod tests
 
 	#[test]
 	fn fill_registry() {
-		let mut registry = RegionRegistry::new();
+		let registry = RegionRegistry::new();
 		let mut manager = SmallChunkManager::new(true, None);
 		let mem = osmem::mmap(NULL, REGION_SPLITTING);
 		
@@ -582,7 +604,7 @@ mod tests
 
 	#[test]
 	fn refill() {
-		let mut mmsource = DummyMMSource::new(None);
+		let mmsource = DummyMMSource::new(None);
 		let mut manager = SmallChunkManager::new(true, Some(MemorySourcePtr::new_ref(&mmsource)));
 				
 		for _ in 0..4096 {
@@ -606,11 +628,86 @@ mod tests
 
 	#[test]
 	fn real_free() {
-		let mut mmsource = DummyMMSource::new(None);
+		let mmsource = DummyMMSource::new(None);
 		let mut manager = SmallChunkManager::new(true, Some(MemorySourcePtr::new_ref(&mmsource)));
 				
 		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
 		assert!(ptr != NULL);
 		manager.free(ptr);
+	}
+
+	#[test]
+	fn rebind_mm_source() {
+		let mmsource1 = DummyMMSource::new(None);
+		let mmsource2 = DummyMMSource::new(None);
+		let mut manager = SmallChunkManager::new(true, Some(MemorySourcePtr::new_ref(&mmsource1)));
+		manager.rebind_mm_source(Some(MemorySourcePtr::new_ref(&mmsource2)));
+	}
+
+	#[test]
+	fn free_empty_multi_page() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, 2*SMALL_PAGE_SIZE);
+		manager.fill(mem, 2*SMALL_PAGE_SIZE, None);
+		
+		let mut ptrs = [0; 2*(SMALL_PAGE_SIZE / 16-10 + 5)];
+		let mut cnt = 0;
+		loop {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			if ptr == NULL {
+				break;
+			} else {
+				ptrs[cnt] = ptr;
+				cnt += 1;
+			}
+		}
+		
+		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-10) + 5);
+
+		for i in 0..2*(SMALL_PAGE_SIZE / 16-10 + 5) {
+			manager.free(ptrs[i]);
+		}
+
+		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn realloc_1() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, 2*SMALL_PAGE_SIZE);
+		manager.fill(mem, 2*SMALL_PAGE_SIZE, None);
+
+		let ptr = manager.realloc(NULL, 16);
+		assert_ne!(ptr,NULL);
+		let ptr = manager.realloc(ptr,64);
+		assert_ne!(ptr,NULL);
+		let ptr = manager.realloc(ptr,0);
+		assert_eq!(ptr, NULL);
+
+		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn get_size() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, 2*SMALL_PAGE_SIZE);
+		manager.fill(mem, 2*SMALL_PAGE_SIZE, None);
+
+		let ptr = manager.realloc(NULL, 16);
+		assert_eq!(16,manager.get_inner_size(ptr));
+		assert_eq!(16,manager.get_total_size(ptr));
+		let ptr = manager.realloc(ptr,64);
+		assert_eq!(64,manager.get_inner_size(ptr));
+		assert_eq!(64,manager.get_total_size(ptr));
+		let ptr = manager.realloc(ptr,0);
+		assert_eq!(ptr, NULL);
+
+		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn is_thread_safe() {
+		let manager = SmallChunkManager::new(true, None);
+		assert_eq!(true, manager.is_thread_safe());
 	}
 }
