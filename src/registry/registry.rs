@@ -24,8 +24,10 @@ use portability::spinlock::SpinLock;
 use portability::osmem;
 use core::ptr;
 use core::mem;
+use common::shared::SharedPtrBox;
 
 pub type RegistryPtr = * const Region;
+pub type RegionRegistryPtr = SharedPtrBox<RegionRegistry>;
 
 ///Define the global registry
 pub struct RegionRegistry {

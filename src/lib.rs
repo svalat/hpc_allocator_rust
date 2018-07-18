@@ -20,6 +20,7 @@ mod registry;
 mod portability;
 mod chunk;
 mod mmsource;
+mod posix;
 
 #[cfg(not(test))]
 pub mod export;
