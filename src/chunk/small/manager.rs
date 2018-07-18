@@ -146,7 +146,7 @@ impl SmallChunkManager {
     //8, 16, 24, 32, 48, 64, 80, 96, 128
     fn get_size_class(mut size: Size) -> usize {
         //errors
-        debug_assert!(SMALL_SIZE_CLASSES.len() / mem::size_of::<Size>() == NB_SIZE_CLASS);
+        debug_assert_eq!(SMALL_SIZE_CLASSES.len(), NB_SIZE_CLASS);
         debug_assert!(size <= SMALL_CHUNK_MAX_SIZE);
         debug_assert!(size > 0);
 
@@ -189,10 +189,11 @@ impl SmallChunkManager {
 		let size_class = Self::get_size_class(run.get_splitting() as usize);
 
 		//if
+		let mut clear = false;
 		match handler.active_runs[size_class] {
 			Some(ref mut r) => {
 				if r.get_addr() == run.get_addr() {
-					*r = run.clone();
+					clear = true;
 				} else {
 					List::remove(&mut run);
 				}
@@ -200,6 +201,11 @@ impl SmallChunkManager {
 			None => {
 				List::remove(&mut run);
 			}
+		}
+
+		//effective clear
+		if clear {
+			handler.active_runs[size_class] = None;
 		}
 		
 		//register as free
@@ -452,9 +458,159 @@ impl SmallChunkManagerLocked {
 #[cfg(test)]
 mod tests
 {
-	use chunk::medium::manager::*;
+	use chunk::small::manager::*;
 	use mmsource::dummy::DummyMMSource;
 	use registry::registry::RegionRegistry;
 	use portability::osmem;
 	use chunk::padding;	
+	use common::consts::*;
+
+	#[test]
+	fn constructor() {
+		let mmsource = DummyMMSource::new(None);
+		let manager1 = SmallChunkManager::new(true, None);
+		let manager1 = SmallChunkManager::new(true,Some(MemorySourcePtr::new_ref(&mmsource)));
+	}
+
+	#[test]
+	fn malloc_empty() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let (ptr,zeroed) = manager.malloc(16,BASIC_ALIGN,false);
+		assert_eq!(ptr, NULL);
+		assert_eq!(zeroed, false);
+	}
+
+	#[test]
+	fn malloc_fill() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem, SMALL_PAGE_SIZE, None);
+		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+63*16);
+		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+62*16);
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn malloc_fill_all() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem, SMALL_PAGE_SIZE, None);
+		
+		let mut cnt = 0;
+		loop {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			if ptr == NULL {
+				break;
+			} else {
+				cnt += 1;
+			}
+		}
+		
+		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-10);
+
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn malloc_fill_all_multi_page() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, 2*SMALL_PAGE_SIZE);
+		manager.fill(mem, 2*SMALL_PAGE_SIZE, None);
+		
+		let mut cnt = 0;
+		loop {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			if ptr == NULL {
+				break;
+			} else {
+				cnt += 1;
+			}
+		}
+		
+		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-10) + 5);
+
+		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn malloc_fill_non_aligned() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem+32, SMALL_PAGE_SIZE, None);
+		
+		let mut cnt = 0;
+		loop {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			if ptr == NULL {
+				break;
+			} else {
+				assert!(ptr >= mem+32);
+				cnt += 1;
+			}
+		}
+		
+		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-12);
+
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn fill_registry() {
+		let mut registry = RegionRegistry::new();
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, REGION_SPLITTING);
+		
+		assert!(registry.get_segment(mem).is_none());
+		manager.fill(mem, REGION_SPLITTING, Some(SharedPtrBox::new_ref(&registry)));
+		assert_eq!(registry.get_segment(mem).unwrap().get_addr(),mem);
+
+		loop {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			if ptr == NULL {
+				break;
+			} else {
+				assert!(ptr >= mem);
+				assert!(ptr < mem + REGION_SPLITTING);
+				assert_eq!(registry.get_segment(ptr).unwrap().get_addr(),mem);
+			}
+		}
+
+		osmem::munmap(mem, REGION_SPLITTING);
+	}
+
+	#[test]
+	fn refill() {
+		let mut mmsource = DummyMMSource::new(None);
+		let mut manager = SmallChunkManager::new(true, Some(MemorySourcePtr::new_ref(&mmsource)));
+				
+		for _ in 0..4096 {
+			let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+			assert!(ptr != NULL);
+		}
+	}
+
+	#[test]
+	fn free_1() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
+		manager.fill(mem, SMALL_PAGE_SIZE, None);
+		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+63*16);
+		manager.free(ptr);
+		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+		assert_eq!(ptr, mem+63*16);
+		osmem::munmap(mem, SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn real_free() {
+		let mut mmsource = DummyMMSource::new(None);
+		let mut manager = SmallChunkManager::new(true, Some(MemorySourcePtr::new_ref(&mmsource)));
+				
+		let (ptr,_) = manager.malloc(16, BASIC_ALIGN, false);
+		assert!(ptr != NULL);
+		manager.free(ptr);
+	}
 }
