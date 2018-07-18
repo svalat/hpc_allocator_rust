@@ -440,7 +440,7 @@ impl SmallChunkManagerLocked {
         debug_assert!(container.is_some());
 
 		//check current usage
-		let size_class = Self::get_size_class(run.get_splitting() as usize);
+		let size_class = SmallChunkManager::get_size_class(run.get_splitting() as usize);
 
 		//if
 		let mut clear = false;
@@ -715,11 +715,25 @@ mod tests
 		let ptr = manager.realloc(NULL, 16);
 		assert_eq!(16,manager.get_inner_size(ptr));
 		assert_eq!(16,manager.get_total_size(ptr));
+		assert_eq!(UNSUPPORTED,manager.get_requested_size(ptr));
 		let ptr = manager.realloc(ptr,64);
 		assert_eq!(64,manager.get_inner_size(ptr));
 		assert_eq!(64,manager.get_total_size(ptr));
+		assert_eq!(UNSUPPORTED,manager.get_requested_size(ptr));
 		let ptr = manager.realloc(ptr,0);
 		assert_eq!(ptr, NULL);
+
+		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
+	}
+
+	#[test]
+	fn remote_free() {
+		let mut manager = SmallChunkManager::new(true, None);
+		let mem = osmem::mmap(NULL, 2*SMALL_PAGE_SIZE);
+		manager.fill(mem, 2*SMALL_PAGE_SIZE, None);
+
+		let ptr = manager.malloc(16,BASIC_ALIGN,false).0;
+		manager.remote_free(ptr);
 
 		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
 	}
