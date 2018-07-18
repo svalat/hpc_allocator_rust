@@ -66,6 +66,10 @@ impl SmallChunkManager {
 	}
 
 	/// Allocate a new segment.
+	/// @param size Define the size to allocate. It will be rounded to the class sizes.
+	/// @param align Define alignement. Currently support only BASIC_ALIGN
+	/// @param zero_filled Ask for memory cleared to zero or not. This parameter is currently ignored
+	/// and all chunks will be returned non zeroed and the caller has to do it.
 	pub fn malloc(&mut self, mut size: Size, align:Size, zero_filled: bool) -> (Addr,bool) {
         //check align
         if align != BASIC_ALIGN {
@@ -113,13 +117,20 @@ impl SmallChunkManager {
         return (res,false);
 	}
 
+	/// Change the memory source attached to the manager.
+	/// @param mmsource Define the new memory source.
 	pub fn rebind_mm_source(&mut self,mmsource: Option<MemorySourcePtr>) {
 		self.locked.lock().mmsource = mmsource;
 	}
 
+	/// Fill the manager with the given memory segement to be used for allocations.
+	/// @param ptr Define the base address of the segment.
+	/// @param size Define the size of the segment. We consider if should en on a multiple of page sizes.
+	/// @param registry Use the given registry to register the segment we build from the given pointer.
 	fn fill(&mut self,ptr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>) {
 		//errors
         debug_assert!(ptr != NULL);
+		debug_assert!((ptr + size)%SMALL_RUN_SIZE == 0);
 
         //if need register, create macro bloc
         let mut addr = ptr;
@@ -144,6 +155,8 @@ impl SmallChunkManager {
 	}
 
     //8, 16, 24, 32, 48, 64, 80, 96, 128
+	/// Get index defining the size class we allocate.
+	/// @param size Define the size for which we want the size class.
     fn get_size_class(mut size: Size) -> usize {
         //errors
         debug_assert_eq!(SMALL_SIZE_CLASSES.len(), NB_SIZE_CLASS);
@@ -176,49 +189,7 @@ impl SmallChunkManager {
         return res;
     }
 
-    fn mark_run_as_free(handler: &mut SmallChunkManagerLocked, mut run: SmallChunkRunPtr) {
-        //errors
-        debug_assert!(run.is_some());
-        debug_assert!(run.is_empty());
-        
-        //reg empty
-        let mut container = run.get_container();
-        debug_assert!(container.is_some());
-
-		//check current usage
-		let size_class = Self::get_size_class(run.get_splitting() as usize);
-
-		//if
-		let mut clear = false;
-		match handler.active_runs[size_class] {
-			Some(ref mut r) => {
-				if r.get_addr() == run.get_addr() {
-					clear = true;
-				} else {
-					List::remove(&mut run);
-				}
-			},
-			None => {
-				List::remove(&mut run);
-			}
-		}
-
-		//effective clear
-		if clear {
-			handler.active_runs[size_class] = None;
-		}
-		
-		//register as free
-		run.set_splitting(0);
-		container.reg_empty(run);
-		
-		//if container is empty, remove it
-		if container.is_empty() && handler.mmsource.is_some() {
-			List::remove(&mut container);
-			handler.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
-		}
-    }
-
+	/// Get the run pointer from the given allocated pointer.
     fn get_run(&self, ptr: Addr) -> Option<SmallChunkRunPtr> {
         //trivial
 		if ptr == NULL {
@@ -239,6 +210,7 @@ impl SmallChunkManager {
 }
 
 impl ChunkManager for SmallChunkManager {
+	/// Free the given allocated addressed if it match with current allocation status.
 	fn free(&mut self,ptr: Addr) {
         //trivial
 		if ptr == NULL {
@@ -260,7 +232,7 @@ impl ChunkManager for SmallChunkManager {
 				
 				//if empty move to empty list
 				if run.is_empty() {
-					Self::mark_run_as_free(&mut handler,run);
+					handler.mark_run_as_free(run);
 				}
 			},
 			None => {},
@@ -367,6 +339,7 @@ impl ChunkManager for SmallChunkManager {
 }
 
 impl SmallChunkManagerLocked {
+	/// Refill the memory of the manager by requesting memory to the memory source.
 	fn refill(&mut self,manager:ChunkManagerPtr) {
 		//trivial
 		if self.mmsource.is_none() {
@@ -393,6 +366,7 @@ impl SmallChunkManagerLocked {
 		self.containers.push_back(container);
 	}
 
+	/// Find a new fully empty run to split if to the given size class and use it for allocations.
 	fn find_empty_run(&mut self) -> Option<SmallChunkRunPtr> {
         //search in containers
         for mut it in self.containers.iter()
@@ -406,6 +380,7 @@ impl SmallChunkManagerLocked {
         return None;
     }
 
+	/// Update the active run to get a fresh one with available free chunks.
     fn upate_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
         //errors
         debug_assert!(size_class < NB_SIZE_CLASS);
@@ -452,6 +427,50 @@ impl SmallChunkManagerLocked {
 
         //return it
         return run;
+    }
+
+	/// Mark the given run as empty and register it in the reuse list for any size class.
+    fn mark_run_as_free(&mut self, mut run: SmallChunkRunPtr) {
+        //errors
+        debug_assert!(run.is_some());
+        debug_assert!(run.is_empty());
+        
+        //reg empty
+        let mut container = run.get_container();
+        debug_assert!(container.is_some());
+
+		//check current usage
+		let size_class = Self::get_size_class(run.get_splitting() as usize);
+
+		//if
+		let mut clear = false;
+		match self.active_runs[size_class] {
+			Some(ref mut r) => {
+				if r.get_addr() == run.get_addr() {
+					clear = true;
+				} else {
+					List::remove(&mut run);
+				}
+			},
+			None => {
+				List::remove(&mut run);
+			}
+		}
+
+		//effective clear
+		if clear {
+			self.active_runs[size_class] = None;
+		}
+		
+		//register as free
+		run.set_splitting(0);
+		container.reg_empty(run);
+		
+		//if container is empty, remove it
+		if container.is_empty() && self.mmsource.is_some() {
+			List::remove(&mut container);
+			self.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
+		}
     }
 }
 
@@ -560,7 +579,7 @@ mod tests
 	fn malloc_fill_non_aligned() {
 		let mut manager = SmallChunkManager::new(true, None);
 		let mem = osmem::mmap(NULL, SMALL_PAGE_SIZE);
-		manager.fill(mem+32, SMALL_PAGE_SIZE, None);
+		manager.fill(mem+32, SMALL_PAGE_SIZE-32, None);
 		
 		let mut cnt = 0;
 		loop {
