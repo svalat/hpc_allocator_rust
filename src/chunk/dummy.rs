@@ -35,14 +35,14 @@ impl ChunkManager for DummyChunkManager {
         panic!("This is fake implementation, should not be called !");
     }
 
-	fn get_inner_size(&mut self,_ptr: Addr) -> Size {
+	fn get_inner_size(&self,_ptr: Addr) -> Size {
         panic!("This is fake implementation, should not be called !");
     }
-	fn get_total_size(&mut self,_ptr: Addr) -> Size {
+	fn get_total_size(&self,_ptr: Addr) -> Size {
         panic!("This is fake implementation, should not be called !");
     }
 
-	fn get_requested_size(&mut self,_ptr: Addr) -> Size {
+	fn get_requested_size(&self,_ptr: Addr) -> Size {
         panic!("This is fake implementation, should not be called !");
     }
 	

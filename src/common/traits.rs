@@ -35,16 +35,16 @@ pub trait ChunkManager {
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr;
 
     /// Retutn the inner size of the allocated segment (could be larger than requested).
-	fn get_inner_size(&mut self,ptr: Addr) -> Size;
+	fn get_inner_size(&self,ptr: Addr) -> Size;
 
     /// Return the total size of the allocated segment (considering the allocator headers).
     /// This account the header manager by current level, not adding the macro blocs manager
     /// in which the allocation is embdeded except for huge allocation which are directly placed
     /// into a macro bloc.
-	fn get_total_size(&mut self,ptr: Addr) -> Size;
+	fn get_total_size(&self,ptr: Addr) -> Size;
 
     /// Return the requested size when available otherwise return the actual inner size.
-	fn get_requested_size(&mut self,ptr: Addr) -> Size;
+	fn get_requested_size(&self,ptr: Addr) -> Size;
 	
     /// Make safety checking to help debugging
     fn hard_checking(&mut self,);
@@ -69,9 +69,8 @@ pub trait ChunkManager {
 pub trait Allocator: ChunkManager
 {
     /// Allocate a chunk of given size and alignement and with given zero constrain.
-    /// It return a tuple with the given address (0 if fail) and a boolean telling if the
-    /// memoury has already been zeroed.
-    fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> (Addr,bool);
+    /// It return a tuple with the given address (0 if fail)
+    fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> Addr;
 
     /// Check if the given chunk manager is the current one
 	fn is_local_chunk_manager(&self, manager: ChunkManagerPtr) -> bool;

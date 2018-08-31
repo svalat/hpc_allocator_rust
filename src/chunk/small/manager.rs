@@ -277,7 +277,7 @@ impl ChunkManager for SmallChunkManager {
 		return res;
 	}
 
-	fn get_inner_size(&mut self,ptr: Addr) -> Size {
+	fn get_inner_size(&self,ptr: Addr) -> Size {
 		//get the run to request the size
 		let run = self.get_run(ptr);
 		debug_assert!(run.is_some());
@@ -289,7 +289,7 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 
-    fn get_total_size(&mut self,ptr: Addr) -> Size {
+    fn get_total_size(&self,ptr: Addr) -> Size {
 		//get the run to request the size
 		let run = self.get_run(ptr);
 		debug_assert!(run.is_some());
@@ -301,7 +301,7 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 
-    fn get_requested_size(&mut self,ptr: Addr) -> Size {
+    fn get_requested_size(&self,ptr: Addr) -> Size {
 		//get the run to request the size
 		let run = self.get_run(ptr);
 		debug_assert!(run.is_some());

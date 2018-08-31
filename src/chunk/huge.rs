@@ -143,7 +143,7 @@ impl ChunkManager for HugeChunkManager {
 		return new_segment.get_content_addr();
     }
 
-	fn get_inner_size(&mut self,ptr: Addr) -> Size {
+	fn get_inner_size(&self,ptr: Addr) -> Size {
         //trivial
 		if ptr == 0 {
 			return 0;
@@ -158,7 +158,7 @@ impl ChunkManager for HugeChunkManager {
 		segment.get_inner_size() - delta
     }
 
-	fn get_total_size(&mut self,ptr: Addr) -> Size {
+	fn get_total_size(&self,ptr: Addr) -> Size {
         //trivial
 		if ptr == 0 {
 			return 0;
@@ -171,7 +171,7 @@ impl ChunkManager for HugeChunkManager {
 		segment.get_total_size()
     }
 
-	fn get_requested_size(&mut self,_ptr: Addr) -> Size {
+	fn get_requested_size(&self,_ptr: Addr) -> Size {
         UNSUPPORTED
     }
 	
