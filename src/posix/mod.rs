@@ -12,4 +12,5 @@
 
 //export
 pub mod uma;
+pub mod numa;
 pub mod local;

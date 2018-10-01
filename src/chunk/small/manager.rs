@@ -26,7 +26,7 @@ use chunk::small::container::{SmallChunkContainer};
 
 //consts
 const NB_SIZE_CLASS: usize = 10;
-const SMALL_CHUNK_MAX_SIZE: usize = 128;
+pub const SMALL_CHUNK_MAX_SIZE: usize = 128;
 const SMALL_SIZE_CLASSES: [Size;NB_SIZE_CLASS] = [8, 16, 24, 32, 48, 64, 80, 96, 112, 128];
 //8 16 24 32 48 64 80 96 128
 

@@ -33,7 +33,8 @@ pub const MACRO_BLOC_SIZE: Size = 2*1024*1024;
 pub const MEDIUM_MIN_INNER_SIZE: Size = 16;
 //#define ADDR_NULL 0
 //#define ALLOC_DO_WARNING true
-//#define HUGE_ALLOC_THREASHOLD (MACRO_BLOC_SIZE/2)
+//Define when to use the huge allocator (roughtly direct mmap via memory source)
+pub const HUGE_ALLOC_THREASHOLD: Size = (MACRO_BLOC_SIZE/2);
 pub const NULL: Addr = 0;
 
 //about region mecanism

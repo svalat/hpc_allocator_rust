@@ -28,7 +28,7 @@ use core::mem;
 /// It uses the ShardPtrBox to bypass ownership and mutability checking.
 #[derive(Copy,Clone)]
 pub struct MPSCFItem {
-    next: SharedPtrBox<MPSCFItem>,
+    pub next: SharedPtrBox<MPSCFItem>,
 }
 
 /// Define the queue object as two atmic pointers : head and tail.
@@ -187,6 +187,8 @@ mod tests
             next = next.next;
             i += 1;
         }
+
+        assert_eq!(i, 8);
     }
 
     #[test]
