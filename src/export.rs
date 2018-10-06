@@ -19,6 +19,7 @@ use core::panic::PanicInfo;
 use core::intrinsics;
 use chunk::huge::HugeChunkManager;
 use chunk::medium::manager::MediumChunkManager;
+use chunk::small::manager::SmallChunkManager;
 use common::consts::*;
 use common::shared::SharedPtrBox;
 
@@ -30,8 +31,11 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
     let pmmsource = MemorySourcePtr::new_ref_mut(&mut mmsource);
 	let mut huge_manager = HugeChunkManager::new(pmmsource.clone());
     let mut medium_manager = MediumChunkManager::new(true, Some(pmmsource.clone()));
+	let mut small_manager = SmallChunkManager::new(true, Some(pmmsource.clone()));
 
-	if size < 1024 {
+	if size < 128 {
+		small_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
+	} else if size < 1024 {
         medium_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
     } else {
         huge_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
