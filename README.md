@@ -1,5 +1,7 @@
 # HPC Allocator Rust
 
+**CAUTION, THIS IMPLEMENTED IS STILL IN PROGRESS AND NOT YET USABLE**
+
 [![Build Status](https://travis-ci.org/svalat/hpc_allocator_rust.svg?branch=master)](https://travis-ci.org/svalat/hpc_allocator_rust)
 [![Coverage Status](https://coveralls.io/repos/github/svalat/hpc_allocator_rust/badge.svg?branch=master)](https://coveralls.io/github/svalat/hpc_allocator_rust?branch=master)
 
