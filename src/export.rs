@@ -49,7 +49,7 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 #[no_mangle]
 pub extern fn eh_personality() {}
 
-#[panic_implementation]
+#[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     unsafe { intrinsics::abort() }
 }

@@ -90,7 +90,7 @@ impl MediumChunkManager {
 			match chunk {
 				Some(_) => zero = false,
 				None => {
-					let (tchunk, tzero) = Self::refill(&mut *guard,checked_size,zero,SharedPtrBox::new_ptr_mut(self as * const ChunkManager as * mut ChunkManager));
+					let (tchunk, tzero) = Self::refill(&mut *guard,checked_size,zero,SharedPtrBox::new_ptr_mut(self as * const dyn ChunkManager as * mut dyn ChunkManager));
 					chunk = tchunk;
 					zero = tzero;
 				},

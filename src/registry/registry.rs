@@ -318,7 +318,7 @@ impl RegionRegistry {
 		
 		for i in 0..MAX_REGIONS {
 			if !regions[i].is_null() {
-				let mut region = unsafe{&mut *(regions[i]  as * mut Region)};
+				let region = unsafe{&mut *(regions[i]  as * mut Region)};
 				region.unmap_registered_memory();
 				osmem::munmap(regions[i] as Addr,mem::size_of::<Region>());
 				regions[i] = ptr::null();

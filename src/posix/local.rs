@@ -414,7 +414,7 @@ impl Allocator for LocalAllocator {
 			Some(handler) => {
 				let mut next = handler;
 				while !next.is_null() {
-					let mut tmp = next.next;
+					let tmp = next.next;
 					let addr = next.get_addr();
 					self.free(addr);
 					next = tmp;

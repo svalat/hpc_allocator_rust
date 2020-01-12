@@ -80,7 +80,7 @@ pub trait Allocator: ChunkManager
 }
 
 /// Pointer to chunk manager to be used everywhere in the code
-pub type ChunkManagerPtr = SharedPtrBox<ChunkManager>;
+pub type ChunkManagerPtr = SharedPtrBox<dyn ChunkManager>;
 
 /// Define a memory source which is used to allocate, deallocate and resize macro blocs. It also
 /// required ChunkManager to link it to the segments it produce and register them inside the 
@@ -114,4 +114,4 @@ pub trait MemorySource {
 }
 
 /// To ease pointer usage
-pub type MemorySourcePtr = SharedPtrBox<MemorySource>;
+pub type MemorySourcePtr = SharedPtrBox<dyn MemorySource>;

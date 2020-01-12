@@ -37,7 +37,7 @@ impl HugeChunkManager {
 		self.mmsource = mmsource;
 	}
 
-	fn get_mm_source(&mut self) -> &mut MemorySource {
+	fn get_mm_source(&mut self) -> &mut dyn MemorySource {
 		self.mmsource.get_mut()
 	}
 
