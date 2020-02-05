@@ -25,7 +25,7 @@ use portability::libc;
 /// allocator for every thread and store it into a TLS.
 /// This allocator use the remote free queue to handle remote free without forcing the whole
 /// managers to be thread safe.
-struct LocalAllocator {
+pub struct LocalAllocator {
 	list_handler: ListNode,//CAUTION, This should be first
 	registry: Option<RegionRegistryPtr>,
 	mmsource: Option<MemorySourcePtr>,
@@ -65,12 +65,106 @@ impl LocalAllocator {
 		//nothing currently
 	}
 
+	fn malloc(&mut self,mut size: Size,align: Size,zero_filled: bool) -> Addr {
+		//errors
+		debug_assert!(self.is_init);
+
+		//to be compatible with glibc policy which didn't return NULL in this case.
+		//otherwise we got crash in sed/grep/nano ...
+		//@todo Optimize by returning a specific fixed address instead of alloc size=1
+		if size == 0 {
+			size = 1;
+		}
+		
+		//call internal malloc
+		return self.internal_malloc(size,align,zero_filled);
+	}
+
+	fn free(&mut self,addr: Addr) {
+		//errors
+		debug_assert!(self.is_init);
+		
+		//trivial
+		if addr == NULL {
+			return;
+		}
+		
+		//get manager
+		let chunk_manager = self.get_chunk_manager(addr);
+		debug_assert!(chunk_manager.is_some());
+		
+		//free it
+		match chunk_manager {
+			Some(mut chunk_manager) => chunk_manager.free(addr),
+			None => {},
+		}
+	}
+
 	pub fn calloc(&mut self,nmemb: Size, size: Size) -> Addr {
 		//errors
 		debug_assert!(self.is_init);
 		
 		//do it
 		return self.internal_malloc(size*nmemb,BASIC_ALIGN,true);
+	}
+
+	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
+		//errors
+		debug_assert!(self.is_init);
+		
+		//trivial
+		let res;
+		if ptr == NULL {
+			res = self.internal_malloc(size, BASIC_ALIGN, false);
+		} else if size == 0 {
+			self.free(ptr);
+			res = NULL;
+		} else {
+			//get manager
+			let manager = self.get_chunk_manager(ptr);
+
+			//handle errors
+			match manager {
+				//ok
+				Some(mut manager) => {
+					//to compare
+					let small_ptr = ChunkManagerPtr::new_ref(& self.small);
+					let medium_ptr = ChunkManagerPtr::new_ref(&self.medium);
+					let huge_ptr = ChunkManagerPtr::new_ref(&self.huge);
+
+					//check if can strictly realloc in one kind of allocator
+					let size_class = LocalAllocator::get_size_class(size);
+					let is_realloc_in_small = size_class == ManagerClass::ManagerSmall && manager == small_ptr;
+					let is_realloc_in_medium = size_class == ManagerClass::ManagerMedium && manager == medium_ptr;
+					let is_realloc_in_huge = size_class == ManagerClass::ManagerHuge && manager == huge_ptr;
+
+					//local and same class realloc otherwise alloc/copy/free
+					if is_realloc_in_small {
+						res = self.small.realloc(ptr, size);
+					} else if is_realloc_in_medium {
+						res = self.medium.realloc(ptr, size);
+					} else if is_realloc_in_huge {
+						res = self.huge.realloc(ptr, size);
+					} else {
+						res = self.internal_malloc(size, BASIC_ALIGN, false);
+						libc::memcpy(res, ptr, size);
+						manager.get_mut().free(ptr);
+					}
+				},
+
+				//manage bad relloc as we can
+				None => {
+					//TODO print warning
+					//panic!("The old segment isn't managed by current memory allocator, try to copy, but create a memory leak and may segfault during unsage copy !");
+
+					res = self.internal_malloc(size, BASIC_ALIGN, false);
+					libc::memcpy(res, ptr, size);
+				}
+			}
+		}
+
+		//final
+		return res;
 	}
 
 	pub fn posix_memalign(&mut self,memptr: * mut *mut Addr,align: Size,size: Size) -> i32 {
@@ -202,6 +296,66 @@ impl LocalAllocator {
 			return ManagerClass::ManagerHuge;
 		}
 	}
+
+	fn get_inner_size(&self,ptr: Addr) -> Size {
+		//errors
+		debug_assert!(self.is_init);
+
+		//trivial
+		if ptr == NULL {
+			return 0;
+		}
+
+		//get manager
+		let chunk_manager = self.get_chunk_manager(ptr);
+		debug_assert!(chunk_manager.is_some());
+
+		//get size
+		match chunk_manager {
+			Some(manager) => return manager.get_inner_size(ptr),
+			None => return 0,
+		}
+	}
+
+	fn get_total_size(&self,ptr: Addr) -> Size {
+		//errors
+		debug_assert!(self.is_init);
+
+		//trivial
+		if ptr == NULL {
+			return 0;
+		}
+
+		//get manager
+		let chunk_manager = self.get_chunk_manager(ptr);
+		debug_assert!(chunk_manager.is_some());
+
+		//get size
+		match chunk_manager {
+			Some(manager) => return manager.get_total_size(ptr),
+			None => return 0,
+		}
+	}
+
+	fn get_requested_size(&self,ptr: Addr) -> Size {
+		//errors
+		debug_assert!(self.is_init);
+
+		//trivial
+		if ptr == NULL {
+			return 0;
+		}
+
+		//get manager
+		let chunk_manager = self.get_chunk_manager(ptr);
+		debug_assert!(chunk_manager.is_some());
+
+		//get size
+		match chunk_manager {
+			Some(manager) => return manager.get_requested_size(ptr),
+			None => return 0,
+		}
+	}
 }
 
 impl Listable<LocalAllocator> for LocalAllocator {
@@ -224,145 +378,26 @@ impl Listable<LocalAllocator> for LocalAllocator {
 
 impl ChunkManager for LocalAllocator {
 	fn free(&mut self,addr: Addr) {
-		//errors
-		debug_assert!(self.is_init);
-		
-		//trivial
-		if addr == NULL {
-			return;
-		}
-		
-		//get manager
-		let chunk_manager = self.get_chunk_manager(addr);
-		debug_assert!(chunk_manager.is_some());
-		
-		//free it
-		match chunk_manager {
-			Some(mut chunk_manager) => chunk_manager.free(addr),
-			None => {},
-		}
+		self.free(addr);
 	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
-		//errors
-		debug_assert!(self.is_init);
-		
-		//trivial
-		let res;
-		if ptr == NULL {
-			res = self.internal_malloc(size, BASIC_ALIGN, false);
-		} else if size == 0 {
-			self.free(ptr);
-			res = NULL;
-		} else {
-			//get manager
-			let manager = self.get_chunk_manager(ptr);
-
-			//handle errors
-			match manager {
-				//ok
-				Some(mut manager) => {
-					//to compare
-					let small_ptr = ChunkManagerPtr::new_ref(& self.small);
-					let medium_ptr = ChunkManagerPtr::new_ref(&self.medium);
-					let huge_ptr = ChunkManagerPtr::new_ref(&self.huge);
-
-					//check if can strictly realloc in one kind of allocator
-					let size_class = LocalAllocator::get_size_class(size);
-					let is_realloc_in_small = size_class == ManagerClass::ManagerSmall && manager == small_ptr;
-					let is_realloc_in_medium = size_class == ManagerClass::ManagerMedium && manager == medium_ptr;
-					let is_realloc_in_huge = size_class == ManagerClass::ManagerHuge && manager == huge_ptr;
-
-					//local and same class realloc otherwise alloc/copy/free
-					if is_realloc_in_small {
-						res = self.small.realloc(ptr, size);
-					} else if is_realloc_in_medium {
-						res = self.medium.realloc(ptr, size);
-					} else if is_realloc_in_huge {
-						res = self.huge.realloc(ptr, size);
-					} else {
-						res = self.internal_malloc(size, BASIC_ALIGN, false);
-						libc::memcpy(res, ptr, size);
-						manager.get_mut().free(ptr);
-					}
-				},
-
-				//manage bad relloc as we can
-				None => {
-					//TODO print warning
-					//panic!("The old segment isn't managed by current memory allocator, try to copy, but create a memory leak and may segfault during unsage copy !");
-
-					res = self.internal_malloc(size, BASIC_ALIGN, false);
-					libc::memcpy(res, ptr, size);
-				}
-			}
-		}
-
-		//final
-		return res;
+		return self.realloc(ptr, size);
 	}
 
-    fn get_inner_size(&self,ptr: Addr) -> Size {
-		//errors
-		debug_assert!(self.is_init);
-
-		//trivial
-		if ptr == NULL {
-			return 0;
-		}
-
-		//get manager
-		let chunk_manager = self.get_chunk_manager(ptr);
-		debug_assert!(chunk_manager.is_some());
-
-		//get size
-		match chunk_manager {
-			Some(manager) => return manager.get_inner_size(ptr),
-			None => return 0,
-		}
+	fn get_inner_size(&self,ptr: Addr) -> Size {
+		return self.get_inner_size(ptr);
 	}
 
-    fn get_total_size(&self,ptr: Addr) -> Size {
-		//errors
-		debug_assert!(self.is_init);
-
-		//trivial
-		if ptr == NULL {
-			return 0;
-		}
-
-		//get manager
-		let chunk_manager = self.get_chunk_manager(ptr);
-		debug_assert!(chunk_manager.is_some());
-
-		//get size
-		match chunk_manager {
-			Some(manager) => return manager.get_total_size(ptr),
-			None => return 0,
-		}
+	fn get_total_size(&self,ptr: Addr) -> Size {
+		return self.get_total_size(ptr);
 	}
 
-    fn get_requested_size(&self,ptr: Addr) -> Size {
-		//errors
-		debug_assert!(self.is_init);
-
-		//trivial
-		if ptr == NULL {
-			return 0;
-		}
-
-		//get manager
-		let chunk_manager = self.get_chunk_manager(ptr);
-		debug_assert!(chunk_manager.is_some());
-
-		//get size
-		match chunk_manager {
-			Some(manager) => return manager.get_requested_size(ptr),
-			None => return 0,
-		}
+	fn get_requested_size(&self,ptr: Addr) -> Size {
+		return self.get_requested_size(ptr);
 	}
 	
-    fn hard_checking(&mut self,) {
+	fn hard_checking(&mut self,) {
 		self.small.hard_checking();
 		self.medium.hard_checking();
 		self.huge.hard_checking();
@@ -389,19 +424,8 @@ impl ChunkManager for LocalAllocator {
 }
 
 impl Allocator for LocalAllocator {
-    fn malloc(&mut self,mut size: Size,align: Size,zero_filled: bool) -> Addr {
-		//errors
-		debug_assert!(self.is_init);
-
-		//to be compatible with glibc policy which didn't return NULL in this case.
-		//otherwise we got crash in sed/grep/nano ...
-		//@todo Optimize by returning a specific fixed address instead of alloc size=1
-		if size == 0 {
-			size = 1;
-		}
-		
-		//call internal malloc
-		return self.internal_malloc(size,align,zero_filled);
+	fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> Addr {
+		return self.malloc(size, align, zero_filled);
 	}
 
 	fn is_local_chunk_manager(&self, manager: ChunkManagerPtr) -> bool {

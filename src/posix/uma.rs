@@ -6,8 +6,132 @@
              LICENSE  : CeCILL-C
 *****************************************************/
 
-///This file implement the UMA allocator considering a local allocator for 
-///every thread and using TLS (Thread Local Storage) to keep track of them.
+/// This file implement the UMA allocator considering a local allocator for 
+/// every thread and using TLS (Thread Local Storage) to keep track of them.
 
 //import
-use common::traits::Allocator;
+use posix::local::LocalAllocator;
+use registry::registry::RegionRegistry;
+use mmsource::cached::CachedMMSource;
+use common::shared::SharedPtrBox;
+use common::types::{Addr,Size};
+use common::consts::*;
+use common::traits::{Allocator, ChunkManager};
+use core::mem;
+use portability::osmem;
+
+/// Global variable to store the registry
+static mut GBL_REGION_REGISTRY: Addr = 0;
+static mut GBL_MEMORY_SOURCE: Addr = 0;
+static mut GBL_MEMORY_ALLOCATOR: Addr = 0;
+
+/// Uniform Memory Access allocateur considering a unique NUMA node
+/// It just setup all the LocalAllocator environnement and redirect
+/// calls.
+struct UmaAllocator {
+	local_allocator: SharedPtrBox<LocalAllocator>,
+}
+
+/// Initialize the memory allocator global variables
+pub fn init() {
+	// Already init
+	unsafe {
+		if GBL_MEMORY_ALLOCATOR != 0 {
+			return;
+		}
+	}
+
+	// calc size
+	let registry_size = mem::size_of::<RegionRegistry>();
+	let mm_source_size = mem::size_of::<CachedMMSource>();
+	let allocator_size = mem::size_of::<LocalAllocator>();
+
+	// allocate
+	let ptr = osmem::mmap(0, registry_size + mm_source_size + allocator_size);
+
+	// unsaface global variable handling
+	unsafe {
+		// setup ptrs
+		GBL_REGION_REGISTRY = ptr;
+		GBL_MEMORY_SOURCE = GBL_REGION_REGISTRY + registry_size;
+		GBL_MEMORY_ALLOCATOR = GBL_MEMORY_SOURCE + mm_source_size;
+
+		// create box
+		let mut registry_ptr: SharedPtrBox<RegionRegistry> = SharedPtrBox::new_addr(GBL_REGION_REGISTRY);
+		let mut mm_source_ptr: SharedPtrBox<CachedMMSource> = SharedPtrBox::new_addr(GBL_MEMORY_SOURCE);
+		let mut allocator: SharedPtrBox<LocalAllocator> = SharedPtrBox::new_addr(GBL_MEMORY_ALLOCATOR);
+
+		// spawn
+		*registry_ptr.get_mut() = RegionRegistry::new();
+		*mm_source_ptr.get_mut() = CachedMMSource::new_default(Some(registry_ptr.clone()));
+		let source = mm_source_ptr.get_mut(); 
+		*allocator.get_mut() = LocalAllocator::new(true, Some(registry_ptr.clone()), Some(SharedPtrBox::new_ref_mut(source)));
+	}
+}
+
+/// Basic implementation of an allocator
+impl UmaAllocator {
+	pub fn new() -> Self {
+		unsafe {
+			// TODO need to implement a full atomic based spinlock to avoid dual init
+			if GBL_MEMORY_ALLOCATOR == 0 {
+				init();
+			}
+			Self {
+				local_allocator: SharedPtrBox::new_addr(GBL_MEMORY_ALLOCATOR)
+			}
+		}
+	}
+
+	fn malloc(&mut self,size: Size) -> Addr {
+		if size < BASIC_ALIGN {
+			return self.local_allocator.malloc(size, size, false);
+		} else {
+			return self.local_allocator.malloc(size, BASIC_ALIGN, false);
+		}
+	}
+
+	pub fn calloc(&mut self,nmemb: Size, size: Size) -> Addr {
+		return self.local_allocator.calloc(nmemb, size);
+	}
+	
+	pub fn posix_memalign(&mut self,memptr: * mut *mut Addr,align: Size,size: Size) -> i32 {
+		return self.local_allocator.posix_memalign(memptr, align, size);
+	}
+
+	pub fn aligned_alloc(&mut self, align:Size, size: Size) -> Addr {
+		return self.local_allocator.aligned_alloc(align, size);
+	}
+
+	pub fn valloc(&mut self, size: Size) -> Addr {
+		return self.local_allocator.valloc(size);
+	}
+
+	pub fn memalign(&mut self, align: Size, size: Size) -> Addr {
+		return self.local_allocator.memalign(align, size);
+	}
+
+	pub fn pvalloc(&mut self, size: Size) -> Addr {
+		return self.local_allocator.pvalloc(size);
+	}
+
+	fn free(&mut self,addr: Addr) {
+		self.local_allocator.free(addr);
+	}
+
+	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
+		return self.local_allocator.realloc(ptr, size);
+	}
+
+	fn get_inner_size(&self,ptr: Addr) -> Size {
+		return self.local_allocator.get_inner_size(ptr);
+	}
+
+	fn get_total_size(&self,ptr: Addr) -> Size {
+		return self.local_allocator.get_total_size(ptr);
+	}
+
+	fn get_requested_size(&self,ptr: Addr) -> Size {
+		return self.local_allocator.get_requested_size(ptr);
+	}
+}
