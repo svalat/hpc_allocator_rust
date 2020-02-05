@@ -242,7 +242,7 @@ mod tests
                         let mut next = handler;
                         has = true;
                         while !next.is_null() {
-                            let mut tmp = next.next;
+                            let tmp = next.next;
                             let addr = next.get_addr();
                             if addr % 4096 == 0 {
                                 osmem::munmap(addr,4096);

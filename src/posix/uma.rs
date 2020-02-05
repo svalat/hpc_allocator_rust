@@ -46,26 +46,33 @@ pub fn init() {
 	let mm_source_size = mem::size_of::<CachedMMSource>();
 	let allocator_size = mem::size_of::<LocalAllocator>();
 
+	// total size
+	let total_size = registry_size + mm_source_size + allocator_size;
+	let total_size = total_size + (SMALL_PAGE_SIZE - total_size % SMALL_PAGE_SIZE);
+
 	// allocate
-	let ptr = osmem::mmap(0, registry_size + mm_source_size + allocator_size);
+	let ptr = osmem::mmap(0, total_size);
 
 	// unsaface global variable handling
 	unsafe {
 		// setup ptrs
 		GBL_REGION_REGISTRY = ptr;
 		GBL_MEMORY_SOURCE = GBL_REGION_REGISTRY + registry_size;
-		GBL_MEMORY_ALLOCATOR = GBL_MEMORY_SOURCE + mm_source_size;
+		let allocatr_addr = GBL_MEMORY_SOURCE + mm_source_size;
 
 		// create box
 		let mut registry_ptr: SharedPtrBox<RegionRegistry> = SharedPtrBox::new_addr(GBL_REGION_REGISTRY);
 		let mut mm_source_ptr: SharedPtrBox<CachedMMSource> = SharedPtrBox::new_addr(GBL_MEMORY_SOURCE);
-		let mut allocator: SharedPtrBox<LocalAllocator> = SharedPtrBox::new_addr(GBL_MEMORY_ALLOCATOR);
+		let mut allocator: SharedPtrBox<LocalAllocator> = SharedPtrBox::new_addr(allocatr_addr);
 
 		// spawn
 		*registry_ptr.get_mut() = RegionRegistry::new();
 		*mm_source_ptr.get_mut() = CachedMMSource::new_default(Some(registry_ptr.clone()));
 		let source = mm_source_ptr.get_mut(); 
 		*allocator.get_mut() = LocalAllocator::new(true, Some(registry_ptr.clone()), Some(SharedPtrBox::new_ref_mut(source)));
+
+		// commit
+		GBL_MEMORY_ALLOCATOR = allocatr_addr;
 	}
 }
 
@@ -133,5 +140,56 @@ impl UmaAllocator {
 
 	fn get_requested_size(&self,ptr: Addr) -> Size {
 		return self.local_allocator.get_requested_size(ptr);
+	}
+}
+
+#[cfg(test)]
+mod tests
+{
+	extern crate std;
+	use posix::uma::*;
+
+	// CAUTION HERE WE USE A GLOBAL ALLOCATOR SO TEST MUST BE WRITTEN
+	// TO BE REPRODUCIBLE AND NOT INTERFER TOGETHER
+
+	#[test]
+	fn basic_1() {
+		let mut allocator = UmaAllocator::new();
+		let ptr0 = allocator.malloc(8);
+		let ptr1 = allocator.malloc(8);
+		assert_ne!(ptr1, 0);
+		allocator.free(ptr1);
+		let ptr2 = allocator.malloc(8);
+		assert_ne!(ptr2, 0);
+		allocator.free(ptr2);
+		assert_eq!(ptr1, ptr2);
+	}
+
+	#[test]
+	fn basic_renew() {
+		let mut allocator = UmaAllocator::new();
+		let ptr0 = allocator.malloc(32);
+		let ptr1 = allocator.malloc(32);
+		assert_ne!(ptr1, 0);
+		let mut allocator = UmaAllocator::new();
+		allocator.free(ptr1);
+		let mut allocator = UmaAllocator::new();
+		let ptr2 = allocator.malloc(32);
+		assert_ne!(ptr2, 0);
+		let mut allocator = UmaAllocator::new();
+		allocator.free(ptr2);
+		assert_eq!(ptr1, ptr2);
+	}
+
+	#[test]
+	fn basic_realloc() {
+		let mut allocator = UmaAllocator::new();
+		let ptr1 = allocator.malloc(64);
+		let ptr2 = allocator.malloc(64);
+		assert_ne!(ptr1, ptr2);
+		let ptr3 = allocator.realloc(ptr1, 64);
+		assert_ne!(ptr1, ptr3);
+		allocator.free(ptr2);
+		allocator.free(ptr3);
 	}
 }
