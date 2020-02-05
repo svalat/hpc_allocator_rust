@@ -30,7 +30,7 @@ static mut GBL_PROTECT_INIT: AtomicUsize = AtomicUsize::new(0);
 /// Uniform Memory Access allocateur considering a unique NUMA node
 /// It just setup all the LocalAllocator environnement and redirect
 /// calls.
-struct UmaAllocator {
+pub struct UmaAllocator {
 	local_allocator: SharedPtrBox<LocalAllocator>,
 }
 
@@ -120,9 +120,10 @@ impl UmaAllocator {
 		}
 	}
 
-	fn malloc(&mut self,size: Size) -> Addr {
+	pub fn malloc(&mut self,size: Size) -> Addr {
 		if size < BASIC_ALIGN {
-			return self.local_allocator.malloc(size, size, false);
+			// TODO
+			return self.local_allocator.malloc(size, BASIC_ALIGN, false);
 		} else {
 			return self.local_allocator.malloc(size, BASIC_ALIGN, false);
 		}
@@ -152,23 +153,23 @@ impl UmaAllocator {
 		return self.local_allocator.pvalloc(size);
 	}
 
-	fn free(&mut self,addr: Addr) {
+	pub fn free(&mut self,addr: Addr) {
 		self.local_allocator.free(addr);
 	}
 
-	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
+	pub fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
 		return self.local_allocator.realloc(ptr, size);
 	}
 
-	fn get_inner_size(&self,ptr: Addr) -> Size {
+	pub fn get_inner_size(&self,ptr: Addr) -> Size {
 		return self.local_allocator.get_inner_size(ptr);
 	}
 
-	fn get_total_size(&self,ptr: Addr) -> Size {
+	pub fn get_total_size(&self,ptr: Addr) -> Size {
 		return self.local_allocator.get_total_size(ptr);
 	}
 
-	fn get_requested_size(&self,ptr: Addr) -> Size {
+	pub fn get_requested_size(&self,ptr: Addr) -> Size {
 		return self.local_allocator.get_requested_size(ptr);
 	}
 }

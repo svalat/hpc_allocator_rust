@@ -146,8 +146,13 @@ impl LocalAllocator {
 					} else if is_realloc_in_huge {
 						res = self.huge.realloc(ptr, size);
 					} else {
+						let current_size = self.get_inner_size(ptr);
 						res = self.internal_malloc(size, BASIC_ALIGN, false);
-						libc::memcpy(res, ptr, size);
+						if size < current_size {
+							libc::memcpy(res, ptr, size);
+						} else {
+							libc::memcpy(res, ptr, current_size);
+						}
 						manager.get_mut().free(ptr);
 					}
 				},

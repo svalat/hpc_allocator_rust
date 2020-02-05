@@ -173,7 +173,7 @@ impl MediumChunkManager {
 		let avail_size = chunk.get_inner_size();
 		
 		//check minimal size
-		if avail_size - inner_size <= MEDIUM_MIN_INNER_SIZE + mem::size_of::<MediumChunk>() {
+		if avail_size - inner_size <= MEDIUM_MIN_INNER_SIZE + 2*mem::size_of::<MediumChunk>() {
 			return None;
 		}
 		
