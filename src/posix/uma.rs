@@ -19,11 +19,13 @@ use common::consts::*;
 use common::traits::{Allocator, ChunkManager};
 use core::mem;
 use portability::osmem;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// Global variable to store the registry
 static mut GBL_REGION_REGISTRY: Addr = 0;
 static mut GBL_MEMORY_SOURCE: Addr = 0;
 static mut GBL_MEMORY_ALLOCATOR: Addr = 0;
+static mut GBL_PROTECT_INIT: AtomicUsize = AtomicUsize::new(0);
 
 /// Uniform Memory Access allocateur considering a unique NUMA node
 /// It just setup all the LocalAllocator environnement and redirect
@@ -37,6 +39,31 @@ pub fn init() {
 	// Already init
 	unsafe {
 		if GBL_MEMORY_ALLOCATOR != 0 {
+			return;
+		}
+	}
+
+	// make atomic
+	unsafe {
+		// get status
+		let mut status = GBL_PROTECT_INIT.load(Ordering::SeqCst);
+
+		// if 0, not init
+		if status == 0 {
+			// try to get action by CAS
+			status = GBL_PROTECT_INIT.compare_and_swap(0, 1, Ordering::SeqCst);
+
+			// we swap and do not get 1 someone is already doing init
+			if status != 0 {
+				while status != 2 {
+					status = GBL_PROTECT_INIT.load(Ordering::Relaxed);
+				}
+				return;
+			}
+		} else if status == 1 {
+			while status != 2 {
+				status = GBL_PROTECT_INIT.load(Ordering::Relaxed);
+			}
 			return;
 		}
 	}
@@ -73,6 +100,9 @@ pub fn init() {
 
 		// commit
 		GBL_MEMORY_ALLOCATOR = allocatr_addr;
+
+		// update atomic protection to release threads in waiting queue
+		GBL_PROTECT_INIT.store(2, Ordering::Relaxed);
 	}
 }
 
