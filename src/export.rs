@@ -127,10 +127,10 @@ pub extern fn eh_personality() {}
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    unsafe { intrinsics::abort() }
+	intrinsics::abort()
 }
 
-#[lang = "eh_unwind_resume"]
+/*#[lang = "eh_unwind_resume"]
 #[no_mangle]
 pub extern fn rust_eh_unwind_resume() {
-}
+}*/

@@ -51,7 +51,10 @@ pub fn init() {
 		// if 0, not init
 		if status == 0 {
 			// try to get action by CAS
-			status = GBL_PROTECT_INIT.compare_and_swap(0, 1, Ordering::SeqCst);
+			match GBL_PROTECT_INIT.compare_exchange(0, 1, Ordering::SeqCst, Ordering::Acquire) {
+				Ok(value) => status = value,
+				Err(_) => ()
+			}
 
 			// we swap and do not get 1 someone is already doing init
 			if status != 0 {
@@ -186,7 +189,7 @@ mod tests
 	#[test]
 	fn basic_1() {
 		let mut allocator = UmaAllocator::new();
-		let ptr0 = allocator.malloc(8);
+		let _ptr0 = allocator.malloc(8);
 		let ptr1 = allocator.malloc(8);
 		assert_ne!(ptr1, 0);
 		allocator.free(ptr1);
@@ -199,7 +202,7 @@ mod tests
 	#[test]
 	fn basic_renew() {
 		let mut allocator = UmaAllocator::new();
-		let ptr0 = allocator.malloc(32);
+		let _ptr0 = allocator.malloc(32);
 		let ptr1 = allocator.malloc(32);
 		assert_ne!(ptr1, 0);
 		let mut allocator = UmaAllocator::new();

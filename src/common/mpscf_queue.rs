@@ -83,7 +83,7 @@ impl MPSCFQueue {
             //in theory atomic isn't required for this write otherwise we can do atomic write
             self.head.store(item.get_ptr_mut(),Ordering::Relaxed);
         } else {
-            unsafe{(&mut *prev)}.next = item;
+            unsafe{&mut *prev}.next = item;
         }
     }
 

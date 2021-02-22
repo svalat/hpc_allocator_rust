@@ -18,7 +18,7 @@ pub fn fast_log_2(size: Size) -> Size {
 		return 0;
 	} else {
 		unsafe{
-			asm!("bsr $1, $0":"=r" (res):"r"(size));
+			llvm_asm!("bsr $1, $0":"=r" (res):"r"(size));
 		};
 		return res;
 	}

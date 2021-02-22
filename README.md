@@ -45,6 +45,13 @@ cargo +nigthly build
 cargo +nigthly test
 ```
 
+Another way to use the nightly chaine:
+
+```
+rustup run nightly cargo build
+rustup run nightly cargo test
+```
+
 ## Detailed research documentation
 
 If you want more details about the research work behind this allocator you can read my PhD. :

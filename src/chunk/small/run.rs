@@ -29,7 +29,7 @@ type MacroEntryPtr = SharedPtrBox<MacroEntry>;
 /// consts
 pub const SMALL_RUN_SIZE: usize = 4096;
 const MACRO_ENTRY_SIZE: usize = mem::size_of::<MacroEntry>();
-const MACRO_ENTRY_BITS: usize = (8 * MACRO_ENTRY_SIZE);
+const MACRO_ENTRY_BITS: usize = 8 * MACRO_ENTRY_SIZE;
 const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 6;
 const STORAGE_SIZE: usize = STORAGE_ENTRIES * MACRO_ENTRY_SIZE;
 
