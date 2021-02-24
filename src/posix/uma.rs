@@ -34,12 +34,12 @@ pub struct UmaAllocator {
 	local_allocator: SharedPtrBox<LocalAllocator>,
 }
 
-/// Initialize the memory allocator global variables
-pub fn init() {
+/// Check first initialization to avoid multiple init
+pub fn check_already_init() -> bool {
 	// Already init
 	unsafe {
 		if GBL_MEMORY_ALLOCATOR != 0 {
-			return;
+			return true;
 		}
 	}
 
@@ -61,14 +61,25 @@ pub fn init() {
 				while status != 2 {
 					status = GBL_PROTECT_INIT.load(Ordering::Relaxed);
 				}
-				return;
+				return true;
 			}
 		} else if status == 1 {
 			while status != 2 {
 				status = GBL_PROTECT_INIT.load(Ordering::Relaxed);
 			}
-			return;
+			return true;
 		}
+	}
+
+	//ok need to init
+	return false;
+}
+
+/// Initialize the memory allocator global variables
+pub fn init() {
+	//check already init
+	if check_already_init() {
+		return;
 	}
 
 	// calc size
