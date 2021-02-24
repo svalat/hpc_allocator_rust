@@ -27,6 +27,24 @@ extern {
 	fn numa_preferred() -> libc::c_int;
 }
 
+/// Determine the best NUMA node for the current task. Return -1 if there is
+/// multiple NUMA node the task can run on.
+pub fn numa_detect_affinity() -> i32 {
+	// if more than one node
+	if unsafe{numa_num_task_nodes()} > 1 {
+		return -1;
+	}
+
+	//preferred
+	let preferred = unsafe{numa_preferred()};
+	if preferred >= 0 {
+		return preferred;
+	}
+
+	//fail
+	panic!("Preferred node is -1, cannot determine which NUMA node to use !");
+}
+
 #[cfg(test)]
 mod tests
 {
@@ -41,5 +59,11 @@ mod tests
 	#[test]
 	fn test_numa_num_task_nodes() {
 		assert_ne!(0, unsafe{numa_num_task_nodes()});
+	}
+
+	#[test]
+	fn test_numa_detect_affinity() {
+		let res = numa_detect_affinity();
+		assert!(res > -1);
 	}
 }
