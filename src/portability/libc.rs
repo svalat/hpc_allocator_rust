@@ -21,5 +21,5 @@ pub fn memcpy(to: Addr, from: Addr, size: Size) {
 
 /// wrapper to memset
 pub fn memset(ptr: Addr, value:  i32, size: Size) {
-    unsafe{libc::memset(ptr as * mut libc::c_void,value,size);}
+	unsafe{libc::memset(ptr as * mut libc::c_void,value,size);}
 }

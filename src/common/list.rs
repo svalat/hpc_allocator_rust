@@ -186,10 +186,10 @@ impl Copy for ListNode { }
 /// To be able to ini an array of list for MediumFreePool
 /// This can be done only on empty list
 impl Clone for ListNode {
-    fn clone(&self) -> Self {
+	fn clone(&self) -> Self {
 		assert!(self.is_none());
-        Self::new()
-    }
+		Self::new()
+	}
 }
 
 /// To be able to ini an array of list for MediumFreePool
@@ -203,10 +203,10 @@ impl <T> Copy for List<T>
 impl <T> Clone for List<T> 
 	where T: Listable<T>
 {
-    fn clone(&self) -> Self {
+	fn clone(&self) -> Self {
 		assert!(self.is_empty());
-        Self::new()
-    }
+		Self::new()
+	}
 }
 
 /// Implement the list operations.

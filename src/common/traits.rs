@@ -26,57 +26,57 @@ use registry::segment::RegionSegmentPtr;
 /// handle alive chunks. In practive they also export a malloc function but which
 /// is not needed in the abstract view (ChunkManager).
 pub trait ChunkManager {
-    /// Free the given address.
+	/// Free the given address.
 	fn free(&mut self,addr: Addr);
 
-    /// Realloc the given address. Might fail if it is not owned by current allocator.
-    /// @param ptr Old address to reallocate. This must match with an address returned by malloc.
-    /// @param size Define the new size.
+	/// Realloc the given address. Might fail if it is not owned by current allocator.
+	/// @param ptr Old address to reallocate. This must match with an address returned by malloc.
+	/// @param size Define the new size.
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr;
 
-    /// Retutn the inner size of the allocated segment (could be larger than requested).
+	/// Retutn the inner size of the allocated segment (could be larger than requested).
 	fn get_inner_size(&self,ptr: Addr) -> Size;
 
-    /// Return the total size of the allocated segment (considering the allocator headers).
-    /// This account the header manager by current level, not adding the macro blocs manager
-    /// in which the allocation is embdeded except for huge allocation which are directly placed
-    /// into a macro bloc.
+	/// Return the total size of the allocated segment (considering the allocator headers).
+	/// This account the header manager by current level, not adding the macro blocs manager
+	/// in which the allocation is embdeded except for huge allocation which are directly placed
+	/// into a macro bloc.
 	fn get_total_size(&self,ptr: Addr) -> Size;
 
-    /// Return the requested size when available otherwise return the actual inner size.
+	/// Return the requested size when available otherwise return the actual inner size.
 	fn get_requested_size(&self,ptr: Addr) -> Size;
 	
-    /// Make safety checking to help debugging
-    fn hard_checking(&mut self,);
+	/// Make safety checking to help debugging
+	fn hard_checking(&mut self,);
 
 	/// Check if the chunk manager if by itself thread safe, this can avoid to take some locks
-    /// into the upper layer.
+	/// into the upper layer.
 	fn is_thread_safe(&self) -> bool;
 
-    /// Registry the given segment as a remote free. It can be handled now or latter
-    /// on call for flush_remote().
+	/// Registry the given segment as a remote free. It can be handled now or latter
+	/// on call for flush_remote().
 	fn remote_free(&mut self,ptr: Addr);
 
-    /// attach a parent to the current chunk manager if not already done at build time.
-    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>);
+	/// attach a parent to the current chunk manager if not already done at build time.
+	fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>);
 
-    /// get the current parent chunk manager if has a hierarchie.
-    /// This is used to support remote free and realloc going from one chunk to another.
-    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr>;
+	/// get the current parent chunk manager if has a hierarchie.
+	/// This is used to support remote free and realloc going from one chunk to another.
+	fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr>;
 }
 
 /// Define the interace which need to be followed by a memory allocator.
 pub trait Allocator: ChunkManager
 {
-    /// Allocate a chunk of given size and alignement and with given zero constrain.
-    /// It return a tuple with the given address (0 if fail)
-    fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> Addr;
+	/// Allocate a chunk of given size and alignement and with given zero constrain.
+	/// It return a tuple with the given address (0 if fail)
+	fn malloc(&mut self,size: Size,align: Size,zero_filled: bool) -> Addr;
 
-    /// Check if the given chunk manager is the current one
+	/// Check if the given chunk manager is the current one
 	fn is_local_chunk_manager(&self, manager: ChunkManagerPtr) -> bool;
 
-    /// Apply flush operation on pending remote frees registred into the chunk manager
-    fn flush_remote(&mut self);
+	/// Apply flush operation on pending remote frees registred into the chunk manager
+	fn flush_remote(&mut self);
 }
 
 /// Pointer to chunk manager to be used everywhere in the code
@@ -86,30 +86,30 @@ pub type ChunkManagerPtr = SharedPtrBox<dyn ChunkManager>;
 /// required ChunkManager to link it to the segments it produce and register them inside the 
 /// global region registry.
 pub trait MemorySource {
-    /// Map a new macro bloc with the given size and register it to the RegionRegistry.
-    /// 
-    /// @param inner_size Define the size which can be stored into the macro bloc (so we need to add header size to allocate)
-    /// @param zero_filled Tell if the chunk need to be zeroed or not. This is usefull to make some optimization about zeroing.
-    ///                     Notice this is for possible optimization with the OS (eg. our zeroing kernel patch. 
-    ///                     If the segment you return is not zeroed you don't
-    ///                     strictly have to zero it, you can delay it to the caller function by returning false in return value.
-    ///                     This is better to make the zeroing in the last layer of allocator as is might init a smaller part of the
-    ///                     macro bloc if he split it and keep the rest for latter use.
-    /// @parma manager Optionally define a chunk manager to be used to register the segment into the region registry.
-    /// 
-    /// @return Return the RegionSegment and a boolean telling is the segment has been zeroed of not.
+	/// Map a new macro bloc with the given size and register it to the RegionRegistry.
+	/// 
+	/// @param inner_size Define the size which can be stored into the macro bloc (so we need to add header size to allocate)
+	/// @param zero_filled Tell if the chunk need to be zeroed or not. This is usefull to make some optimization about zeroing.
+	///                     Notice this is for possible optimization with the OS (eg. our zeroing kernel patch. 
+	///                     If the segment you return is not zeroed you don't
+	///                     strictly have to zero it, you can delay it to the caller function by returning false in return value.
+	///                     This is better to make the zeroing in the last layer of allocator as is might init a smaller part of the
+	///                     macro bloc if he split it and keep the rest for latter use.
+	/// @parma manager Optionally define a chunk manager to be used to register the segment into the region registry.
+	/// 
+	/// @return Return the RegionSegment and a boolean telling is the segment has been zeroed of not.
 	fn map(&mut self,inner_size: Size, zero_filled: bool, manager: Option<ChunkManagerPtr>) -> (RegionSegmentPtr, bool);
 
-    /// Remap an existing segment. This on Linux directly redirect to mremap but can on some other system
-    /// rely on allocator + copy + deallocation. It also take care of moving the registration into the
-    /// RegionRegisty. We can also change the ChunkManager owning the segment.
+	/// Remap an existing segment. This on Linux directly redirect to mremap but can on some other system
+	/// rely on allocator + copy + deallocation. It also take care of moving the registration into the
+	/// RegionRegisty. We can also change the ChunkManager owning the segment.
 	fn remap(&mut self,old_segment: RegionSegmentPtr,new_inner_size: Size, manager: Option<ChunkManagerPtr>) -> RegionSegmentPtr;
 	
-    /// Unmap the segment. Then we can decide in the MemorySource if we keep it for latter use of if we return
-    /// it to the OS.
-    fn unmap(&mut self,segment: RegionSegmentPtr);
+	/// Unmap the segment. Then we can decide in the MemorySource if we keep it for latter use of if we return
+	/// it to the OS.
+	fn unmap(&mut self,segment: RegionSegmentPtr);
 
-    //TODO see if we need.
+	//TODO see if we need.
 	//virtual bool haveEfficientRemap(void) const = 0;
 }
 

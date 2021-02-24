@@ -33,9 +33,9 @@ const SMALL_SIZE_CLASSES: [Size;NB_SIZE_CLASS] = [8, 16, 24, 32, 48, 64, 80, 96,
 /// Group content to protect by spinlock
 struct SmallChunkManagerLocked {
 	mmsource: Option<MemorySourcePtr>,
-    active_runs: [Option<SmallChunkRunPtr>; NB_SIZE_CLASS],
-    in_use: [List<SmallChunkRun>; NB_SIZE_CLASS],
-    containers: List<SmallChunkContainer>,
+	active_runs: [Option<SmallChunkRunPtr>; NB_SIZE_CLASS],
+	in_use: [List<SmallChunkRun>; NB_SIZE_CLASS],
+	containers: List<SmallChunkContainer>,
 }
 
 /// Implement the small chunk allocator based on MediumFreePool
@@ -56,9 +56,9 @@ impl SmallChunkManager {
 		Self {
 			locked: SpinLock::new(SmallChunkManagerLocked {
 				mmsource: mmsource,
-                active_runs: [None,None,None,None,None,None,None,None,None,None],
-                in_use: [List::new(); NB_SIZE_CLASS],
-                containers: List::new(), 
+				active_runs: [None,None,None,None,None,None,None,None,None,None],
+				in_use: [List::new(); NB_SIZE_CLASS],
+				containers: List::new(), 
 			}),
 			use_lock: use_lock,
 			parent: None,
@@ -71,50 +71,50 @@ impl SmallChunkManager {
 	/// @param zero_filled Ask for memory cleared to zero or not. This parameter is currently ignored
 	/// and all chunks will be returned non zeroed and the caller has to do it.
 	pub fn malloc(&mut self, mut size: Size, align:Size, zero_filled: bool) -> (Addr,bool) {
-        //check align
-        if align != BASIC_ALIGN {
-            panic!("TODO support align");
-        }
+		//check align
+		if align != BASIC_ALIGN {
+			panic!("TODO support align");
+		}
 
-        //round if smallest size to avoid checking warning of filling ratio in SmallChunkRun
-        if size < SMALL_SIZE_CLASSES[0] {
-            size = SMALL_SIZE_CLASSES[0];
-        }
+		//round if smallest size to avoid checking warning of filling ratio in SmallChunkRun
+		if size < SMALL_SIZE_CLASSES[0] {
+			size = SMALL_SIZE_CLASSES[0];
+		}
 
-        //get related size class
-        let size_class = Self::get_size_class(size);
-        debug_assert!(SMALL_SIZE_CLASSES[size_class] % align == 0);
+		//get related size class
+		let size_class = Self::get_size_class(size);
+		debug_assert!(SMALL_SIZE_CLASSES[size_class] % align == 0);
 
-        //lock
-        let mut res = NULL;
-        {
-            let mut handler = self.locked.optional_lock(self.use_lock);
+		//lock
+		let mut res = NULL;
+		{
+			let mut handler = self.locked.optional_lock(self.use_lock);
 
-            //get active run for class
-            {
-                let run = &mut (handler.active_runs[size_class]);
+			//get active run for class
+			{
+				let run = &mut (handler.active_runs[size_class]);
 
-                //try to alloc
-                match run {
-                    Some(ref mut run) => res = run.malloc(size,align,zero_filled).0,
-                    None => {},
-                }
-            }
+				//try to alloc
+				match run {
+					Some(ref mut run) => res = run.malloc(size,align,zero_filled).0,
+					None => {},
+				}
+			}
 
-            if res == NULL {
-                let run = handler.upate_active_run_for_size(size_class,ChunkManagerPtr::new_ref(self));
-                match run {
-                    Some(mut run) => res = run.malloc(size,align,zero_filled).0,
-                    None => {},
-                }
-            }
-        }
+			if res == NULL {
+				let run = handler.upate_active_run_for_size(size_class,ChunkManagerPtr::new_ref(self));
+				match run {
+					Some(mut run) => res = run.malloc(size,align,zero_filled).0,
+					None => {},
+				}
+			}
+		}
 
-        //check
-        debug_assert!(res == NULL || res % align == 0);
+		//check
+		debug_assert!(res == NULL || res % align == 0);
 
-        //ret
-        return (res,false);
+		//ret
+		return (res,false);
 	}
 
 	/// Change the memory source attached to the manager.
@@ -129,69 +129,69 @@ impl SmallChunkManager {
 	/// @param registry Use the given registry to register the segment we build from the given pointer.
 	fn fill(&mut self,ptr: Addr, size: Size, registry: Option<SharedPtrBox<RegionRegistry>>) {
 		//errors
-        debug_assert!(ptr != NULL);
+		debug_assert!(ptr != NULL);
 		debug_assert!((ptr + size)%SMALL_RUN_SIZE == 0);
 
-        //if need register, create macro bloc
-        let mut addr = ptr;
-        let mut size = size;
-        match registry {
-            Some(mut registry) => {
-               let segment = registry.get_mut().set_entry(addr,size,ChunkManagerPtr::new_ref(self));
-                addr = segment.get_content_addr();
-                size = segment.get_inner_size();
-            },
-            None => {}
-        }
-        
-        //setup run container
-        let container = SmallChunkContainer::setup(addr,size);
+		//if need register, create macro bloc
+		let mut addr = ptr;
+		let mut size = size;
+		match registry {
+			Some(mut registry) => {
+			let segment = registry.get_mut().set_entry(addr,size,ChunkManagerPtr::new_ref(self));
+				addr = segment.get_content_addr();
+				size = segment.get_inner_size();
+			},
+			None => {}
+		}
+		
+		//setup run container
+		let container = SmallChunkContainer::setup(addr,size);
 
-        //reg in list
-        {
-            let mut handler = self.locked.optional_lock(self.use_lock);
-            handler.containers.push_back(container);
-        }
+		//reg in list
+		{
+			let mut handler = self.locked.optional_lock(self.use_lock);
+			handler.containers.push_back(container);
+		}
 	}
 
-    //8, 16, 24, 32, 48, 64, 80, 96, 128
+	//8, 16, 24, 32, 48, 64, 80, 96, 128
 	/// Get index defining the size class we allocate.
 	/// @param size Define the size for which we want the size class.
-    fn get_size_class(mut size: Size) -> usize {
-        //errors
-        debug_assert_eq!(SMALL_SIZE_CLASSES.len(), NB_SIZE_CLASS);
-        debug_assert!(size <= SMALL_CHUNK_MAX_SIZE);
-        debug_assert!(size > 0);
+	fn get_size_class(mut size: Size) -> usize {
+		//errors
+		debug_assert_eq!(SMALL_SIZE_CLASSES.len(), NB_SIZE_CLASS);
+		debug_assert!(size <= SMALL_CHUNK_MAX_SIZE);
+		debug_assert!(size > 0);
 
-        //trivial
-        if size > SMALL_CHUNK_MAX_SIZE {
-            panic!("Invalid too big size !");
-        }
-        
-        //if too small
-        if size < 8 {
-            size = 8;
-        }
-        
-        //calc from 8 to 32
-        let res;
-        if size <= 32 {
-            res = (size - 1) / 8;
-        } else {
-            res = (size - 1) / 16 + 2;
-        }
+		//trivial
+		if size > SMALL_CHUNK_MAX_SIZE {
+			panic!("Invalid too big size !");
+		}
+		
+		//if too small
+		if size < 8 {
+			size = 8;
+		}
+		
+		//calc from 8 to 32
+		let res;
+		if size <= 32 {
+			res = (size - 1) / 8;
+		} else {
+			res = (size - 1) / 16 + 2;
+		}
 
-        debug_assert!(SMALL_SIZE_CLASSES[res] >= size);
-        if res > 0 {
-            debug_assert!(SMALL_SIZE_CLASSES[res-1] < size);	
-        }
+		debug_assert!(SMALL_SIZE_CLASSES[res] >= size);
+		if res > 0 {
+			debug_assert!(SMALL_SIZE_CLASSES[res-1] < size);	
+		}
 
-        return res;
-    }
+		return res;
+	}
 
 	/// Get the run pointer from the given allocated pointer.
-    fn get_run(&self, ptr: Addr) -> Option<SmallChunkRunPtr> {
-        //trivial
+	fn get_run(&self, ptr: Addr) -> Option<SmallChunkRunPtr> {
+		//trivial
 		if ptr == NULL {
 			return None;
 		}
@@ -206,13 +206,13 @@ impl SmallChunkManager {
 		} else {
 			return None;
 		}
-    }
+	}
 }
 
 impl ChunkManager for SmallChunkManager {
 	/// Free the given allocated addressed if it match with current allocation status.
 	fn free(&mut self,ptr: Addr) {
-        //trivial
+		//trivial
 		if ptr == NULL {
 			return;
 		}
@@ -240,7 +240,7 @@ impl ChunkManager for SmallChunkManager {
 	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
-        //trivial cases
+		//trivial cases
 		if ptr == NULL {
 			return self.malloc(size,BASIC_ALIGN,false).0;
 		} else if size == 0 {
@@ -289,7 +289,7 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 
-    fn get_total_size(&self,ptr: Addr) -> Size {
+	fn get_total_size(&self,ptr: Addr) -> Size {
 		//get the run to request the size
 		let run = self.get_run(ptr);
 		debug_assert!(run.is_some());
@@ -301,7 +301,7 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 
-    fn get_requested_size(&self,ptr: Addr) -> Size {
+	fn get_requested_size(&self,ptr: Addr) -> Size {
 		//get the run to request the size
 		let run = self.get_run(ptr);
 		debug_assert!(run.is_some());
@@ -313,11 +313,11 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 	
-    fn is_thread_safe(&self) -> bool {
+	fn is_thread_safe(&self) -> bool {
 		self.use_lock
 	}
 
-    fn remote_free(&mut self,ptr: Addr) {
+	fn remote_free(&mut self,ptr: Addr) {
 		if self.use_lock {
 			self.free(ptr);
 		} else {
@@ -325,17 +325,17 @@ impl ChunkManager for SmallChunkManager {
 		}
 	}
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
+	fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
 		self.parent = parent;
 	}
 
-    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
+	fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
 		self.parent.clone()
 	}
 
-    fn hard_checking(&mut self) {
-        //TODO
-    }
+	fn hard_checking(&mut self) {
+		//TODO
+	}
 }
 
 impl SmallChunkManagerLocked {
@@ -360,7 +360,7 @@ impl SmallChunkManagerLocked {
 		let inner_size = segment.get_inner_size();
 		
 		//setup run container
-        let container = SmallChunkContainer::setup(ptr,inner_size);
+		let container = SmallChunkContainer::setup(ptr,inner_size);
 
 		//register to list
 		self.containers.push_back(container);
@@ -368,76 +368,76 @@ impl SmallChunkManagerLocked {
 
 	/// Find a new fully empty run to split if to the given size class and use it for allocations.
 	fn find_empty_run(&mut self) -> Option<SmallChunkRunPtr> {
-        //search in containers
-        for mut it in self.containers.iter()
-        {
-            match it.get_empty_run() {
-                Some(res) => {return Some(res)},
-                None => {},
-            }
-        }
-        
-        return None;
-    }
-
-	/// Update the active run to get a fresh one with available free chunks.
-    fn upate_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
-        //errors
-        debug_assert!(size_class < NB_SIZE_CLASS);
-        match self.active_runs[size_class] {
-            Some(ref mut r) => debug_assert!(r.is_full()),
-			None => {},
-        }
-
-        //search in list
-        let mut run = None;
-        for ref mut it in self.in_use[size_class].iter() {
-            if it.is_full() == false {
-                run = Some(it.clone());
-                List::remove(it);
-                break;
-            }
-        }
-        
-        //if have not, try in empty list
-        if run.is_none() {
-            run = self.find_empty_run();
-            //need to refill
-            if run.is_none() {
-                self.refill(manager);
-                run = self.find_empty_run();
-            }
-            //setup splitting in run
-            match run {
-                Some(ref mut r) => r.set_splitting(SMALL_SIZE_CLASSES[size_class] as u16),
+		//search in containers
+		for mut it in self.containers.iter()
+		{
+			match it.get_empty_run() {
+				Some(res) => {return Some(res)},
 				None => {},
 			}
-        }
+		}
+		
+		return None;
+	}
 
-        //if have one
-        if run.is_some() {
-            //insert in FIFO
+	/// Update the active run to get a fresh one with available free chunks.
+	fn upate_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
+		//errors
+		debug_assert!(size_class < NB_SIZE_CLASS);
+		match self.active_runs[size_class] {
+			Some(ref mut r) => debug_assert!(r.is_full()),
+			None => {},
+		}
+
+		//search in list
+		let mut run = None;
+		for ref mut it in self.in_use[size_class].iter() {
+			if it.is_full() == false {
+				run = Some(it.clone());
+				List::remove(it);
+				break;
+			}
+		}
+		
+		//if have not, try in empty list
+		if run.is_none() {
+			run = self.find_empty_run();
+			//need to refill
+			if run.is_none() {
+				self.refill(manager);
+				run = self.find_empty_run();
+			}
+			//setup splitting in run
+			match run {
+				Some(ref mut r) => r.set_splitting(SMALL_SIZE_CLASSES[size_class] as u16),
+				None => {},
+			}
+		}
+
+		//if have one
+		if run.is_some() {
+			//insert in FIFO
 			match self.active_runs[size_class] {
-                Some(ref r) => self.in_use[size_class].push_back(r.clone()),
+				Some(ref r) => self.in_use[size_class].push_back(r.clone()),
 				None => {}
 			}
 
-            self.active_runs[size_class] = run.clone();
-        }
+			self.active_runs[size_class] = run.clone();
+		}
 
-        //return it
-        return run;
-    }
+		//return it
+		return run;
+	}
 
 	/// Mark the given run as empty and register it in the reuse list for any size class.
-    fn mark_run_as_free(&mut self, mut run: SmallChunkRunPtr) {
-        //errors
-        debug_assert!(run.is_some());
-        debug_assert!(run.is_empty());
-        
-        //reg empty
-        let mut container = run.get_container();
-        debug_assert!(container.is_some());
+	fn mark_run_as_free(&mut self, mut run: SmallChunkRunPtr) {
+		//errors
+		debug_assert!(run.is_some());
+		debug_assert!(run.is_empty());
+		
+		//reg empty
+		let mut container = run.get_container();
+		debug_assert!(container.is_some());
 
 		//check current usage
 		let size_class = SmallChunkManager::get_size_class(run.get_splitting() as usize);
@@ -471,7 +471,7 @@ impl SmallChunkManagerLocked {
 			List::remove(&mut container);
 			self.mmsource.as_mut().unwrap().unmap(RegionSegment::get_from_content_ptr(container.get_addr()));
 		}
-    }
+	}
 }
 
 #[cfg(test)]

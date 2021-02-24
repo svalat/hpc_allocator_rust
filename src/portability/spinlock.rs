@@ -36,8 +36,8 @@ pub struct SpinLock<T> {
 ///Implement guard mechanism
 pub struct SpinLockGuard<'a, T:'a>
 {
-    lock: &'a PthreadSpinLock,
-    data: &'a mut T,
+	lock: &'a PthreadSpinLock,
+	data: &'a mut T,
 	unlock: bool,
 }
 
@@ -60,33 +60,33 @@ impl <T> SpinLock<T> {
 	}
 
 	///lock
- 	pub fn lock(&self) -> SpinLockGuard<T>
-    {
+	pub fn lock(&self) -> SpinLockGuard<T>
+	{
 		let ptr = &self.lock as * const PthreadSpinLock;
-        unsafe{pthread_spin_lock(ptr)};
-        SpinLockGuard
-        {
-            lock: &self.lock,
-            data: unsafe{&mut *(&self.data as * const T as * mut T)},
+		unsafe{pthread_spin_lock(ptr)};
+		SpinLockGuard
+		{
+			lock: &self.lock,
+			data: unsafe{&mut *(&self.data as * const T as * mut T)},
 			unlock: true,
-        }
-    }
+		}
+	}
 
 	///lock
- 	pub fn optional_lock(&self, lock: bool) -> SpinLockGuard<T>
-    {
+	pub fn optional_lock(&self, lock: bool) -> SpinLockGuard<T>
+	{
 		let ptr = &self.lock as * const PthreadSpinLock;
 		if lock {
-        	unsafe{pthread_spin_lock(ptr)};
+			unsafe{pthread_spin_lock(ptr)};
 		}
 
-        SpinLockGuard
-        {
-            lock: &self.lock,
-            data: unsafe{&mut *(&self.data as * const T as * mut T)},
+		SpinLockGuard
+		{
+			lock: &self.lock,
+			data: unsafe{&mut *(&self.data as * const T as * mut T)},
 			unlock: lock,
-        }
-    }
+		}
+	}
 
 	///Special case, consider read unlock for some struct of the allocator which
 	///are built and use with this constrain (eg. the region registry).
@@ -98,26 +98,26 @@ impl <T> SpinLock<T> {
 ///Implement deref for spin lock guard
 impl<'a, T> Deref for SpinLockGuard<'a, T>
 {
-    type Target = T;
-    fn deref<'b>(&'b self) -> &'b T { &*self.data }
+	type Target = T;
+	fn deref<'b>(&'b self) -> &'b T { &*self.data }
 }
 
 ///Implement deref mutable for spin lock guard
 impl<'a, T> DerefMut for SpinLockGuard<'a, T>
 {
-    fn deref_mut<'b>(&'b mut self) -> &'b mut T { &mut *self.data }
+	fn deref_mut<'b>(&'b mut self) -> &'b mut T { &mut *self.data }
 }
 
 ///Implement drop for spin lock guard
 impl<'a, T> Drop for SpinLockGuard<'a, T>
 {
-    fn drop(&mut self)
-    {
-        if self.unlock {
+	fn drop(&mut self)
+	{
+		if self.unlock {
 			let ptr = self.lock as * const PthreadSpinLock;
-        	unsafe{pthread_spin_unlock(ptr)};
+			unsafe{pthread_spin_unlock(ptr)};
 		}
-    }
+	}
 }
 
 #[cfg(test)]

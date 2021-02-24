@@ -23,11 +23,11 @@ use core::mem;
 // CAUTION, IF YOU CHANGE THIS YOU NEED TO ADAPT reverse_default_free_sizes() OR
 // SET USE FAST_REVERSE to false.
 static FREE_LIST_SIZES: [Size;NB_FREE_LIST] = [16, 24,
-        32,    64,   96,  128,  160,   192,   224,   256,    288,    320,
-        352,  384,  416,  448,  480,   512,   544,   576,    608,    640,
-        672,  704,  736,  768,  800,   832,   864,   896,    928,    960,
-        992, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144,
-        524288, 1048576, 2*1024*1024, Size::max_value(), Size::max_value(), Size::max_value(), Size::max_value(), Size::max_value()
+	32,    64,   96,  128,  160,   192,   224,   256,    288,    320,
+	352,  384,  416,  448,  480,   512,   544,   576,    608,    640,
+	672,  704,  736,  768,  800,   832,   864,   896,    928,    960,
+	992, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144,
+	524288, 1048576, 2*1024*1024, Size::max_value(), Size::max_value(), Size::max_value(), Size::max_value(), Size::max_value()
 ];
 /// If use default sizes we can use the fast reverse function instead of doing dichotomic search.
 const FAST_REVERSE: bool = true;

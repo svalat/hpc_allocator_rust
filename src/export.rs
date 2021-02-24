@@ -30,17 +30,17 @@ use posix::uma::UmaAllocator;
 pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 	/*let mut registry = RegionRegistry::new();
 	let mut mmsource = CachedMMSource::new_default(Some(SharedPtrBox::new_ref_mut(&mut registry)));
-    let pmmsource = MemorySourcePtr::new_ref_mut(&mut mmsource);
+	let pmmsource = MemorySourcePtr::new_ref_mut(&mut mmsource);
 	let mut huge_manager = HugeChunkManager::new(pmmsource.clone());
-    let mut medium_manager = MediumChunkManager::new(true, Some(pmmsource.clone()));
+	let mut medium_manager = MediumChunkManager::new(true, Some(pmmsource.clone()));
 	let mut small_manager = SmallChunkManager::new(true, Some(pmmsource.clone()));
 
 	if size < 128 {
 		small_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
 	} else if size < 1024 {
-        medium_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
-    } else {
-        huge_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
+		medium_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
+	} else {
+		huge_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
 	}*/
 	let mut allocator = UmaAllocator::new();
 	return allocator.malloc(size as Size) as *mut libc::c_void;

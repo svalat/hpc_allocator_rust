@@ -40,12 +40,12 @@ const STORAGE_SIZE: usize = STORAGE_ENTRIES * MACRO_ENTRY_SIZE;
 /// this overlapping part as allocated to ignore it in the run.
 pub struct SmallChunkRun {
 	data:[MacroEntry; STORAGE_ENTRIES],
-    list_node: ListNode,
-    container: SmallChunkContainerPtr,
-    cnt_alloc: SmallSize,
-    skiped_size: SmallSize,
-    splitting: SmallSize,
-    bitmap_entries: SmallSize,
+	list_node: ListNode,
+	container: SmallChunkContainerPtr,
+	cnt_alloc: SmallSize,
+	skiped_size: SmallSize,
+	splitting: SmallSize,
+	bitmap_entries: SmallSize,
 }
 
 /// Used to point
@@ -53,32 +53,32 @@ pub type SmallChunkRunPtr = SharedPtrBox<SmallChunkRun>;
 
 /// Implement
 impl SmallChunkRun {
-    /// Setup a new small chunk runner by storing it at the given address.
-    /// @param addr Define the base address at which to store the small chunk runner.
-    /// @param skiped_size Define the memory size we need to skip from addr to start allocating object. This
-    /// is usefull to skip the macro bloc heaers used by the allocator region registry.
-    /// @param splitting Define which max size bloc we manage in this allocator
-    /// @param container Pointer to the parent container.
-    pub fn setup(addr: Addr,skiped_size: SmallSize, splitting: SmallSize, container: SmallChunkContainerPtr) -> SmallChunkRunPtr {
-        let mut cur = SmallChunkRunPtr::new_addr(addr);
+	/// Setup a new small chunk runner by storing it at the given address.
+	/// @param addr Define the base address at which to store the small chunk runner.
+	/// @param skiped_size Define the memory size we need to skip from addr to start allocating object. This
+	/// is usefull to skip the macro bloc heaers used by the allocator region registry.
+	/// @param splitting Define which max size bloc we manage in this allocator
+	/// @param container Pointer to the parent container.
+	pub fn setup(addr: Addr,skiped_size: SmallSize, splitting: SmallSize, container: SmallChunkContainerPtr) -> SmallChunkRunPtr {
+		let mut cur = SmallChunkRunPtr::new_addr(addr);
 
 		cur.cnt_alloc = 0;
 		cur.skiped_size = (ops::up_to_power_of_2(skiped_size as usize, MACRO_ENTRY_SIZE as usize) / MACRO_ENTRY_SIZE as usize) as u16;
 		cur.splitting = splitting;
 		cur.bitmap_entries = 0;
 		cur.container = container;
-        cur.list_node = ListNode::new();
+		cur.list_node = ListNode::new();
 		if splitting > 0 {
 			cur.set_splitting(splitting);
 		}
 
 		cur
-    }
+	}
 
-    /// Configure the splitting size, this can only be done if the run is empty.
-    /// It will configure wich max size the run manage.    
-    pub fn set_splitting(&mut self,splitting: SmallSize) {
-        //errors
+	/// Configure the splitting size, this can only be done if the run is empty.
+	/// It will configure wich max size the run manage.    
+	pub fn set_splitting(&mut self,splitting: SmallSize) {
+		//errors
 		debug_assert!(splitting as usize <= STORAGE_SIZE);
 		if self.cnt_alloc != 0 {
 			panic!("Cannot change the size of non empty SmallChunkRun.");
@@ -97,7 +97,7 @@ impl SmallChunkRun {
 		//calc bitmap entries
 		let bitmap_real_entries = STORAGE_SIZE / splitting as usize;
 		self.bitmap_entries = ops::up_to_power_of_2(bitmap_real_entries as usize, MACRO_ENTRY_BITS) as u16;
-        
+		
 		//calc skiped entries
 		let skiped_entries = self.get_rounded_nb_entries(self.skiped_size * MACRO_ENTRY_SIZE as u16);
 		
@@ -105,8 +105,8 @@ impl SmallChunkRun {
 		let bitmap_size = self.bitmap_entries / 8;
 		let bitmap_hidden_entries = self.get_rounded_nb_entries(bitmap_size);
 
-        //check
-        assert!(self.bitmap_entries > bitmap_hidden_entries + skiped_entries);
+		//check
+		assert!(self.bitmap_entries > bitmap_hidden_entries + skiped_entries);
 		
 		//clear bitmap with 1 (all free)
 		for i in 0..(bitmap_size / MACRO_ENTRY_SIZE as u16) {
@@ -118,20 +118,20 @@ impl SmallChunkRun {
 			self.set_bit_status_zero(i);
 		}
 
-        //mark last bits to 0
-	    for i in bitmap_real_entries as u16..self.bitmap_entries as u16 {
-		    self.set_bit_status_zero(i);
-        }
-    }
+		//mark last bits to 0
+		for i in bitmap_real_entries as u16..self.bitmap_entries as u16 {
+			self.set_bit_status_zero(i);
+		}
+	}
 
-    /// Check if the run is empty and contain no allocated segments.
-    pub fn is_empty(&self) -> bool {
-        self.cnt_alloc == 0
-    }
+	/// Check if the run is empty and contain no allocated segments.
+	pub fn is_empty(&self) -> bool {
+		self.cnt_alloc == 0
+	}
 
-    /// Check if the run is full and cannot allocate more segements.
-    pub fn is_full(&self) -> bool {
-        debug_assert!(self.splitting > 0);
+	/// Check if the run is full and cannot allocate more segements.
+	pub fn is_full(&self) -> bool {
+		debug_assert!(self.splitting > 0);
 		let macro_entries = self.bitmap_entries / MACRO_ENTRY_BITS as u16;
 		for i in 0..macro_entries {
 			if self.get_macro_entry(i) != 0 {
@@ -139,15 +139,15 @@ impl SmallChunkRun {
 			}
 		}
 		return true;
-    }
+	}
 
-    /// Allocate a new segement for the given size which must be smaller or equal
-    /// to the splitting size.
-    /// @param size Define the size of the chunk we want to allocated
-    /// @param align Define the alignement we want, which should be equal to splitting size currently.
-    /// @param zero_filled Define if we want a zero filled segment or not
-    pub fn malloc(&mut self,size: Size, align: Size, zero_filled: bool) -> (Addr,bool) {
-        //check size
+	/// Allocate a new segement for the given size which must be smaller or equal
+	/// to the splitting size.
+	/// @param size Define the size of the chunk we want to allocated
+	/// @param align Define the alignement we want, which should be equal to splitting size currently.
+	/// @param zero_filled Define if we want a zero filled segment or not
+	pub fn malloc(&mut self,size: Size, align: Size, zero_filled: bool) -> (Addr,bool) {
+		//check size
 		if size > self.splitting as usize {
 			panic!("SmallChunkRun only support allocation smaller than the splitting size.");
 		}
@@ -179,11 +179,11 @@ impl SmallChunkRun {
 		
 		//didn't not find free memory
 		return (0,zero_filled);
-    }
+	}
 
-    /// Free the given segment.
-    pub fn free(&mut self,ptr: Addr) {
-        //compute bit position
+	/// Free the given segment.
+	pub fn free(&mut self,ptr: Addr) {
+		//compute bit position
 		//TODO maybe assume
 		debug_assert!(self.contain(ptr));
 
@@ -200,132 +200,132 @@ impl SmallChunkRun {
 		
 		//update counter
 		self.cnt_alloc -= 1;
-    }
+	}
 
-    /// Return the internal size of the segment at given address. For small chunk
-    /// manager this is always exactly the splitting size as is des not have chunk
-    /// headers
-    pub fn get_inner_size(&self,ptr: Addr) -> Size {
-        debug_assert!(self.contain(ptr));
-		return self.splitting as Size;
-    }
-
-    /// Return the requested size of the segment at given address.
-    pub fn get_requested_size(&self,ptr: Addr)-> Size {
+	/// Return the internal size of the segment at given address. For small chunk
+	/// manager this is always exactly the splitting size as is des not have chunk
+	/// headers
+	pub fn get_inner_size(&self,ptr: Addr) -> Size {
 		debug_assert!(self.contain(ptr));
-        return UNSUPPORTED;
-    }
-
-    /// Return the total size of the segment at given address. For small chunk
-    /// manager this is always exactly the splitting size as is des not have chunk
-    /// headers.
-    pub fn get_total_size(&self,ptr: Addr) -> Size {
-        debug_assert!(self.contain(ptr));
 		return self.splitting as Size;
-    }
+	}
 
-    /// Return the current splitting in use.
-    pub fn get_splitting(&self) -> SmallSize {
-        return self.splitting;
-    }
+	/// Return the requested size of the segment at given address.
+	pub fn get_requested_size(&self,ptr: Addr)-> Size {
+		debug_assert!(self.contain(ptr));
+		return UNSUPPORTED;
+	}
 
-    /// Reallocate a segment at the given address. In small chunk manager
-    /// this function does not do anything but returning the current address
-    /// as we manage only chunks we size matching with splitting size.
-    /// So either it fit and we can let it here either we cannot do anything
-    /// but panicking.
-    pub fn realloc(&self,ptr: Addr, size: Size) -> Addr {
-        if size > self.splitting as usize {
+	/// Return the total size of the segment at given address. For small chunk
+	/// manager this is always exactly the splitting size as is des not have chunk
+	/// headers.
+	pub fn get_total_size(&self,ptr: Addr) -> Size {
+		debug_assert!(self.contain(ptr));
+		return self.splitting as Size;
+	}
+
+	/// Return the current splitting in use.
+	pub fn get_splitting(&self) -> SmallSize {
+		return self.splitting;
+	}
+
+	/// Reallocate a segment at the given address. In small chunk manager
+	/// this function does not do anything but returning the current address
+	/// as we manage only chunks we size matching with splitting size.
+	/// So either it fit and we can let it here either we cannot do anything
+	/// but panicking.
+	pub fn realloc(&self,ptr: Addr, size: Size) -> Addr {
+		if size > self.splitting as usize {
 			panic!("Realloc isn't supported in SmammChunkRun.");
 		}
 		return ptr;
-    }
+	}
 
-    /// Check if the current runner contain the given address.
-    pub fn contain(&self,ptr: Addr) -> bool {
-        let base_addr = (&self.data) as * const MacroEntry as Addr;
+	/// Check if the current runner contain the given address.
+	pub fn contain(&self,ptr: Addr) -> bool {
+		let base_addr = (&self.data) as * const MacroEntry as Addr;
 		return ptr >= base_addr+self.skiped_size as usize+self.bitmap_entries as usize/MACRO_ENTRY_BITS as usize && ptr < base_addr + STORAGE_SIZE;
-    }
+	}
 
-    /// Return the current container.
-    pub fn get_container(&self) -> SmallChunkContainerPtr {
-        self.container.clone()
-    }
+	/// Return the current container.
+	pub fn get_container(&self) -> SmallChunkContainerPtr {
+		self.container.clone()
+	}
 
-    /// Set the bit to one to mark the related chunk as freed and ready for resuse.
-    /// @param id Id of the bit we want to set from the base address of the runner.
-    fn set_bit_status_one(&mut self,id: SmallSize) {
-        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
-        let mid = id as usize / MACRO_ENTRY_BITS;
-        let bit = id as usize % MACRO_ENTRY_BITS;
-        let value = self.get_macro_entry_mut(mid as u16);
+	/// Set the bit to one to mark the related chunk as freed and ready for resuse.
+	/// @param id Id of the bit we want to set from the base address of the runner.
+	fn set_bit_status_one(&mut self,id: SmallSize) {
+		assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
+		let mid = id as usize / MACRO_ENTRY_BITS;
+		let bit = id as usize % MACRO_ENTRY_BITS;
+		let value = self.get_macro_entry_mut(mid as u16);
 		*value |= (1 as MacroEntry) << (bit);
-    }
+	}
 
-    /// Set the bit to zero to mark the related chunk as allocated and not ready for resuse.
-    /// @param id Id of the bit we want to set from the base address of the runner.
-    fn set_bit_status_zero(&mut self,id: SmallSize) {
-        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
-        let mid = id as usize / MACRO_ENTRY_BITS;
-        let bit = id as usize % MACRO_ENTRY_BITS;
-        let value = self.get_macro_entry_mut(mid as u16);
+	/// Set the bit to zero to mark the related chunk as allocated and not ready for resuse.
+	/// @param id Id of the bit we want to set from the base address of the runner.
+	fn set_bit_status_zero(&mut self,id: SmallSize) {
+		assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
+		let mid = id as usize / MACRO_ENTRY_BITS;
+		let bit = id as usize % MACRO_ENTRY_BITS;
+		let value = self.get_macro_entry_mut(mid as u16);
 		*value &= !((1 as MacroEntry) << (bit));
-    }
+	}
 
-    /// Retrurn the bit status for the given chunk ID.
-    fn get_bit_status(&self,id: SmallSize) -> bool {
-        assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
-        let mid = id as usize / MACRO_ENTRY_BITS;
-        let bit = id as usize % MACRO_ENTRY_BITS;
-        let value = self.get_macro_entry(mid as u16);
+	/// Retrurn the bit status for the given chunk ID.
+	fn get_bit_status(&self,id: SmallSize) -> bool {
+		assert!((id as usize) < MACRO_ENTRY_BITS * STORAGE_ENTRIES);
+		let mid = id as usize / MACRO_ENTRY_BITS;
+		let bit = id as usize % MACRO_ENTRY_BITS;
+		let value = self.get_macro_entry(mid as u16);
 		return (value & ((1 as MacroEntry) << (bit as usize))) != 0;
-    }
+	}
 
-    /// Round number of entries to take in account mutiples.
-    fn get_rounded_nb_entries(&self,size: SmallSize) -> SmallSize {
-        let entries = size / self.splitting;
+	/// Round number of entries to take in account mutiples.
+	fn get_rounded_nb_entries(&self,size: SmallSize) -> SmallSize {
+		let entries = size / self.splitting;
 		if entries * self.splitting != size {
 			return entries + 1;
 		} else {
 			return entries;
 		}
-    }
-
-    /// Retyrn the requested macro entry in mutable ref way to modity
-    fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
-        assert!((id as usize) < STORAGE_ENTRIES);
-        &mut self.data[self.skiped_size as usize + id as usize]
-    }
-
-    /// Set the macro entry.
-    fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
-		assert!((id as usize) < STORAGE_ENTRIES);
-        self.data[self.skiped_size as usize + id as usize] = value;
 	}
 
-    /// Return the requested macro entry value.
+	/// Retyrn the requested macro entry in mutable ref way to modity
+	fn get_macro_entry_mut(&mut self,id: SmallSize) -> &mut MacroEntry {
+		assert!((id as usize) < STORAGE_ENTRIES);
+		&mut self.data[self.skiped_size as usize + id as usize]
+	}
+
+	/// Set the macro entry.
+	fn set_macro_entry(&mut self,id: SmallSize, value: MacroEntry) {
+		assert!((id as usize) < STORAGE_ENTRIES);
+		self.data[self.skiped_size as usize + id as usize] = value;
+	}
+
+	/// Return the requested macro entry value.
 	fn get_macro_entry(&self,id: SmallSize) -> MacroEntry {
-        assert!((id as usize) < STORAGE_ENTRIES);
-        self.data[self.skiped_size as usize + id as usize]
-    }
+		assert!((id as usize) < STORAGE_ENTRIES);
+		self.data[self.skiped_size as usize + id as usize]
+	}
 }
 
 impl Listable<SmallChunkRun> for SmallChunkRun {
 	fn get_list_node<'a>(&'a self) -> &'a ListNode {
-        return &self.list_node;
-    }
+		return &self.list_node;
+	}
 
 	fn get_list_node_mut<'a>(&'a mut self) -> &'a mut ListNode {
-        return &mut self.list_node;
-    }
+		return &mut self.list_node;
+	}
 
 	fn get_from_list_node<'a>(elmt: * const ListNode) -> * const SmallChunkRun {
-        return (elmt as Addr - mem::size_of::<MacroEntry>() * STORAGE_ENTRIES) as * const SmallChunkRun
-    }
+		return (elmt as Addr - mem::size_of::<MacroEntry>() * STORAGE_ENTRIES) as * const SmallChunkRun
+	}
 
 	fn get_from_list_node_mut<'a>(elmt: * mut ListNode) -> * mut SmallChunkRun {
-        return (elmt as Addr - mem::size_of::<MacroEntry>() * STORAGE_ENTRIES) as * mut SmallChunkRun
-    }
+		return (elmt as Addr - mem::size_of::<MacroEntry>() * STORAGE_ENTRIES) as * mut SmallChunkRun
+	}
 }
 
 #[cfg(test)]
@@ -334,7 +334,7 @@ mod tests
 	use core::mem;
 	use chunk::small::run::*;
 	use portability::osmem;
-    use common::list::List;
+	use common::list::List;
 
 	#[test]
 	fn type_check() {
@@ -451,93 +451,93 @@ mod tests
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
+	#[test]
 	fn full_no_overlap() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
 		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
 		
 		let mut cnt = 0;
-        let mut store: [Addr; SMALL_RUN_SIZE/16] = [0; SMALL_RUN_SIZE/16];
+		let mut store: [Addr; SMALL_RUN_SIZE/16] = [0; SMALL_RUN_SIZE/16];
 		loop {
-            let (p,_) = run.malloc(16,16,false);
-            if p == NULL {
-                break;
-            } else {
-                store[cnt] = p;
-                cnt += 1;
-            }
-        };
+			let (p,_) = run.malloc(16,16,false);
+			if p == NULL {
+				break;
+			} else {
+				store[cnt] = p;
+				cnt += 1;
+			}
+		};
 		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
 
-        for i in 0..cnt {
-            for j in 0..i {
-                assert_ne!(store[j], store[i]);
-            }
-        }
+		for i in 0..cnt {
+			for j in 0..i {
+				assert_ne!(store[j], store[i]);
+			}
+		}
 
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
+	#[test]
 	fn free_middle() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
 		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
 		
 		let mut cnt = 0;
-        let mut store: [Addr; SMALL_RUN_SIZE/16] = [0; SMALL_RUN_SIZE/16];
+		let mut store: [Addr; SMALL_RUN_SIZE/16] = [0; SMALL_RUN_SIZE/16];
 		loop {
-            let (p,_) = run.malloc(16,16,false);
-            if p == NULL {
-                break;
-            } else {
-                store[cnt] = p;
-                cnt += 1;
-            }
-        };
+			let (p,_) = run.malloc(16,16,false);
+			if p == NULL {
+				break;
+			} else {
+				store[cnt] = p;
+				cnt += 1;
+			}
+		};
 		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
 
-        run.free(store[32]);
+		run.free(store[32]);
 
-        assert_eq!(store[32], run.malloc(16,16,false).0);
+		assert_eq!(store[32], run.malloc(16,16,false).0);
 
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
+	#[test]
 	fn is_empty() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
 		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
 
-        assert_eq!(run.is_empty(), true);
-        let (p,_) = run.malloc(16,16,false);
-        assert_eq!(run.is_empty(), false);
-        run.free(p);
-        assert_eq!(run.is_empty(), true);	
+		assert_eq!(run.is_empty(), true);
+		let (p,_) = run.malloc(16,16,false);
+		assert_eq!(run.is_empty(), false);
+		run.free(p);
+		assert_eq!(run.is_empty(), true);	
 		
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
+	#[test]
 	fn is_full() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
 		let mut run = SmallChunkRun::setup(ptr, 0, 16, container);
 		
-        assert_eq!(run.is_full(), false);
+		assert_eq!(run.is_full(), false);
 
 		let mut cnt = 0;
 		while run.malloc(16,16,false).0 != NULL {cnt += 1;};
 		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
 
-        assert_eq!(run.is_full(), true);
+		assert_eq!(run.is_full(), true);
 
 		osmem::munmap(ptr, 4096);
 	}
-    
-    #[test]
+	
+	#[test]
 	fn skiped_offset() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
@@ -545,51 +545,51 @@ mod tests
 		
 		let mut cnt = 0;
 		loop {
-            let (p,_) = run.malloc(16,16,false);
-            if p == NULL {
-                break; 
-            } else {
-                assert!(p >= ptr + 32 );
-                cnt += 1;
-            }
-        } 
+			let (p,_) = run.malloc(16,16,false);
+			if p == NULL {
+				break; 
+			} else {
+				assert!(p >= ptr + 32 );
+				cnt += 1;
+			}
+		} 
 		assert_eq!(SMALL_RUN_SIZE/16 - 5 - 2,cnt);
 
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
+	#[test]
 	fn realloc() {
 		let ptr = osmem::mmap(0, 4096);
 		let container = SmallChunkContainerPtr::new_null();
 		let mut run = SmallChunkRun::setup(ptr, 32, 16, container);
 		
 		let (p1,_) = run.malloc(16,16,false);
-        let p2 = run.realloc(p1,15); 
+		let p2 = run.realloc(p1,15); 
 		assert_eq!(p1,p2);
 
 		osmem::munmap(ptr, 4096);
 	}
 
-    #[test]
-    fn listable() {
-        let ptr1 = osmem::mmap(0, 4096);
+	#[test]
+	fn listable() {
+		let ptr1 = osmem::mmap(0, 4096);
 		let ptr2 = osmem::mmap(0, 4096);
 
-        let container = SmallChunkContainerPtr::new_null();
+		let container = SmallChunkContainerPtr::new_null();
 		let run1 = SmallChunkRun::setup(ptr1, 32, 16, container.clone());
 		let run2 = SmallChunkRun::setup(ptr2, 32, 16, container.clone());
-		 
-        let mut list :List<SmallChunkRun> = List::new();
+		
+		let mut list :List<SmallChunkRun> = List::new();
 
-        list.push_back(run1);
-        list.push_back(run2);
+		list.push_back(run1);
+		list.push_back(run2);
 
-        for mut i in list.iter() {
-            i.malloc(16,16,false);
-        }
+		for mut i in list.iter() {
+			i.malloc(16,16,false);
+		}
 
 		osmem::munmap(ptr1, 4096);
 		osmem::munmap(ptr2, 4096);
-    }
+	}
 }

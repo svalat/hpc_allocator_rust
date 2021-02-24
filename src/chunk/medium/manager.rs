@@ -357,7 +357,7 @@ impl ChunkManager for MediumChunkManager {
 		}
 	}
 
-    fn get_total_size(&self,ptr: Addr) -> Size {
+	fn get_total_size(&self,ptr: Addr) -> Size {
 		//trivial
 		if ptr == NULL {
 			return 0;
@@ -374,11 +374,11 @@ impl ChunkManager for MediumChunkManager {
 		}
 	}
 
-    fn get_requested_size(&self,_ptr: Addr) -> Size {
+	fn get_requested_size(&self,_ptr: Addr) -> Size {
 		UNSUPPORTED
 	}
 	
-    fn hard_checking(&mut self,) {
+	fn hard_checking(&mut self,) {
 		self.locked.lock().pools.hard_checking();
 	}
 
@@ -386,7 +386,7 @@ impl ChunkManager for MediumChunkManager {
 		self.use_lock
 	}
 
-    fn remote_free(&mut self,ptr: Addr) {
+	fn remote_free(&mut self,ptr: Addr) {
 		if self.use_lock {
 			self.free(ptr);
 		} else {
@@ -394,11 +394,11 @@ impl ChunkManager for MediumChunkManager {
 		}
 	}
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
+	fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
 		self.parent = parent;
 	}
 
-    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
+	fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
 		self.parent.clone()
 	}
 }

@@ -159,9 +159,9 @@ impl <T: ?Sized> SharedPtrBox<T> {
 }
 
 impl <T: ?Sized>  PartialEq for SharedPtrBox<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
-    }
+	fn eq(&self, other: &Self) -> bool {
+		self.data == other.data
+	}
 }
 
 impl <T: ?Sized> Eq for SharedPtrBox<T> {}
@@ -169,14 +169,14 @@ impl <T: ?Sized> Eq for SharedPtrBox<T> {}
 /// Implement deref for spin lock guard
 impl<T: ?Sized> Deref for SharedPtrBox<T>
 {
-    type Target = T;
-    fn deref(& self) -> & T { self.get() }
+	type Target = T;
+	fn deref(& self) -> & T { self.get() }
 }
 
 /// Implement deref mutable for spin lock guard
 impl<T: ?Sized> DerefMut for SharedPtrBox<T>
 {
-    fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
+	fn deref_mut(&mut self) ->  &mut T { self.get_mut()}
 }
 
 /// Implement clone.chunk
@@ -290,4 +290,4 @@ mod tests
 		p.get_mut().free(0);
 		assert_eq!(mem::size_of::<ChunkManagerPtr>(), 16);
 	}
- }
+}

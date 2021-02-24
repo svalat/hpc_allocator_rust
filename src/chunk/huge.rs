@@ -91,7 +91,7 @@ impl HugeChunkManager {
 //impl trait
 impl ChunkManager for HugeChunkManager {
 	fn free(&mut self,addr: Addr) {
-        //trivial
+		//trivial
 		if addr == 0 {
 			return;
 		}
@@ -104,10 +104,10 @@ impl ChunkManager for HugeChunkManager {
 
 		//return it to mm source
 		self.get_mm_source().unmap(segment);
-    }
+	}
 
 	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
-        let old_ptr = ptr;
+		let old_ptr = ptr;
 
 		//trivial
 		if ptr == 0 && size == 0 {
@@ -141,10 +141,10 @@ impl ChunkManager for HugeChunkManager {
 		debug_assert!(new_segment.get_inner_size() >= size);
 		
 		return new_segment.get_content_addr();
-    }
+	}
 
 	fn get_inner_size(&self,ptr: Addr) -> Size {
-        //trivial
+		//trivial
 		if ptr == 0 {
 			return 0;
 		}
@@ -156,10 +156,10 @@ impl ChunkManager for HugeChunkManager {
 		
 		let segment = RegionSegment::get_from_content_ptr(real_ptr);
 		segment.get_inner_size() - delta
-    }
+	}
 
 	fn get_total_size(&self,ptr: Addr) -> Size {
-        //trivial
+		//trivial
 		if ptr == 0 {
 			return 0;
 		}
@@ -169,32 +169,32 @@ impl ChunkManager for HugeChunkManager {
 		
 		let segment = RegionSegment::get_from_content_ptr(real_ptr);
 		segment.get_total_size()
-    }
+	}
 
 	fn get_requested_size(&self,_ptr: Addr) -> Size {
-        UNSUPPORTED
-    }
+		UNSUPPORTED
+	}
 	
-    fn hard_checking(&mut self) {
-        //TODO
-    }
+	fn hard_checking(&mut self) {
+		//TODO
+	}
 
 	fn is_thread_safe(&self) -> bool {
-        true
-    }
+		true
+	}
 
 	fn remote_free(&mut self,ptr: Addr) {
 		self.free(ptr);
-        panic!("Should not be used as HugeChunkManager is thread safe !");
-    }
+		panic!("Should not be used as HugeChunkManager is thread safe !");
+	}
 
-    fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
-        self.parent = parent;
-    }
+	fn set_parent_chunk_manager(&mut self,parent: Option<ChunkManagerPtr>) {
+		self.parent = parent;
+	}
 
-    fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
-        self.parent.clone()
-    }
+	fn get_parent_chunk_manager(&mut self) -> Option<ChunkManagerPtr> {
+		self.parent.clone()
+	}
 }
 
 #[cfg(test)]
