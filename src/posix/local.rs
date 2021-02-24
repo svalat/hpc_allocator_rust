@@ -242,7 +242,7 @@ impl LocalAllocator {
 		//round size
 		let ptr;
 		let zeroed;
-		if size <= SMALL_CHUNK_MAX_SIZE {
+		if fsize <= SMALL_CHUNK_MAX_SIZE {
 			let (a,b) = self.small.malloc(fsize, align, zero);
 			ptr = a;
 			zeroed = b;
