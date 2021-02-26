@@ -23,7 +23,7 @@ use common::types::*;
 //use chunk::small::manager::SmallChunkManager;
 //use common::consts::*;
 //use common::shared::SharedPtrBox;
-use posix::uma::UmaAllocator;
+use posix::seq::SeqAllocator;
 
 // Entry point for this program
 #[no_mangle]
@@ -42,73 +42,73 @@ pub extern fn malloc(size: libc::size_t) -> *mut libc::c_void {
 	} else {
 		huge_manager.malloc(size,BASIC_ALIGN,false).0 as *mut libc::c_void
 	}*/
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.malloc(size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn calloc(nmemb: libc::size_t, size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.calloc(nmemb as Size, size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn posix_memalign(memptr: * mut *mut libc::c_void,align: libc::size_t,size: libc::size_t) -> libc::int32_t {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.posix_memalign(memptr as *mut *mut Addr, align as Size, size as Size) as libc::int32_t;
 }
 
 #[no_mangle]
 pub extern "C" fn aligned_alloc(align: libc::size_t, size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.aligned_alloc(align as Size, size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn valloc(size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.valloc(size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn memalign(align: libc::size_t, size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.memalign(align as Size, size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn pvalloc(size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.pvalloc(size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn free(addr: *mut libc::c_void) {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	allocator.free(addr as Addr);
 }
 
 #[no_mangle]
 pub extern "C" fn realloc(ptr: *mut libc::c_void,size: libc::size_t) -> *mut libc::c_void {
-	let mut allocator = UmaAllocator::new();
+	let mut allocator = SeqAllocator::new();
 	return allocator.realloc(ptr as Addr, size as Size) as *mut libc::c_void;
 }
 
 #[no_mangle]
 pub extern "C" fn get_inner_size(ptr: *mut libc::c_void) -> libc::size_t {
-	let allocator = UmaAllocator::new();
+	let allocator = SeqAllocator::new();
 	return allocator.get_inner_size(ptr as Addr) as libc::size_t;
 }
 
 #[no_mangle]
 pub extern "C" fn get_total_size(ptr: *mut libc::c_void) -> libc::size_t {
-	let allocator = UmaAllocator::new();
+	let allocator = SeqAllocator::new();
 	return allocator.get_total_size(ptr as Addr) as libc::size_t;
 }
 
 #[no_mangle]
 pub extern "C" fn get_requested_size(ptr: *mut libc::c_void) -> libc::size_t {
-	let allocator = UmaAllocator::new();
+	let allocator = SeqAllocator::new();
 	return allocator.get_requested_size(ptr as Addr) as libc::size_t;
 }
 

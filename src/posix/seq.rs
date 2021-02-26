@@ -27,10 +27,10 @@ static mut GBL_MEMORY_SOURCE: Addr = 0;
 static mut GBL_MEMORY_ALLOCATOR: Addr = 0;
 static mut GBL_PROTECT_INIT: AtomicUsize = AtomicUsize::new(0);
 
-/// Uniform Memory Access allocateur considering a unique NUMA node
+/// Implement a sequential version of the memory allocator.
 /// It just setup all the LocalAllocator environnement and redirect
-/// calls.
-pub struct UmaAllocator {
+/// calls with spinlock to protect for multi-threading.
+pub struct SeqAllocator {
 	local_allocator: SharedPtrBox<LocalAllocator>,
 }
 
@@ -121,7 +121,7 @@ pub fn init() {
 }
 
 /// Basic implementation of an allocator
-impl UmaAllocator {
+impl SeqAllocator {
 	pub fn new() -> Self {
 		unsafe {
 			// TODO need to implement a full atomic based spinlock to avoid dual init
@@ -199,7 +199,7 @@ mod tests
 
 	#[test]
 	fn basic_1() {
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		let _ptr0 = allocator.malloc(8);
 		let ptr1 = allocator.malloc(8);
 		assert_ne!(ptr1, 0);
@@ -212,23 +212,23 @@ mod tests
 
 	#[test]
 	fn basic_renew() {
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		let _ptr0 = allocator.malloc(32);
 		let ptr1 = allocator.malloc(32);
 		assert_ne!(ptr1, 0);
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		allocator.free(ptr1);
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		let ptr2 = allocator.malloc(32);
 		assert_ne!(ptr2, 0);
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		allocator.free(ptr2);
 		assert_eq!(ptr1, ptr2);
 	}
 
 	#[test]
 	fn basic_realloc() {
-		let mut allocator = UmaAllocator::new();
+		let mut allocator = SeqAllocator::new();
 		let ptr1 = allocator.malloc(64);
 		let ptr2 = allocator.malloc(64);
 		assert_ne!(ptr1, ptr2);

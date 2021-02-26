@@ -11,6 +11,6 @@
 /// base classes.
 
 //export
-pub mod uma;
+pub mod seq;
 pub mod numa;
 pub mod local;
