@@ -14,3 +14,4 @@ pub mod spinlock;
 pub mod arch;
 pub mod libc;
 pub mod libnuma;
+//pub mod hwloc;

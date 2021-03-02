@@ -116,8 +116,10 @@ impl MediumChunkManager {
 		let mut res = chunk.get_content_addr();
 		
 		//check for padding
-		if res % align != 0 {
-			res = PaddedChunk::pad(res,PaddedChunk::calc_padding(res,align,size,chunk.get_inner_size()),chunk.get_inner_size());
+		if align != BASIC_ALIGN {
+			if res % align != 0 {
+				res = PaddedChunk::pad(res,PaddedChunk::calc_padding(res,align,size,chunk.get_inner_size()),chunk.get_inner_size());
+			}
 		}
 		
 		//final check
@@ -415,7 +417,7 @@ mod tests
 	#[test]
 	fn build() {
 		let mut registry = RegionRegistry::new();
-		let mut mmsource = DummyMMSource::new(Some(&mut registry));
+		let mut mmsource = DummyMMSource::new(Some(SharedPtrBox::new_ref_mut(&mut registry)));
 		let mut _manager = MediumChunkManager::new(false, Some(MemorySourcePtr::new_ptr_mut(&mut mmsource)));
 	}
 
@@ -675,7 +677,7 @@ mod tests
 	#[test]
 	fn full_workflow() {
 		let mut registry = RegionRegistry::new();
-		let mut mmsource = DummyMMSource::new(Some(&mut registry));
+		let mut mmsource = DummyMMSource::new(Some(SharedPtrBox::new_ref_mut(&mut registry)));
 		let mut manager = MediumChunkManager::new(false, Some(MemorySourcePtr::new_ptr_mut(&mut mmsource)));
 
 		//alloc

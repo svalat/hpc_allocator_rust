@@ -13,36 +13,24 @@ use common::types::Size;
 use common::traits::{MemorySource,ChunkManagerPtr};
 use common::consts::*;
 use common::ops;
+use common::shared::SharedPtrBox;
 use portability::osmem;
 use registry::registry::RegionRegistry;
 use registry::segment::{RegionSegment,RegionSegmentPtr};
 use core::mem;
 
 pub struct DummyMMSource {
-	registry: Option<* mut RegionRegistry>,
+	registry: Option<SharedPtrBox<RegionRegistry>>,
 }
 
 impl DummyMMSource {
 	/// Create a new memory source. It optionally take a region registry to be used for registration.
 	/// 
 	/// TODO we should use a SharedPtrBox instead of bypassing locally the ownership and casting to pointers.
-	pub fn new(registry: Option<& mut RegionRegistry>) -> DummyMMSource {
-		let ptr;
-		
-		match registry {
-			Some(x) => ptr = Some(x as * mut RegionRegistry),
-			None => ptr = None,
-		}
-
+	pub fn new(registry: Option<SharedPtrBox<RegionRegistry>>) -> DummyMMSource {
 		DummyMMSource {
-			registry: ptr
+			registry: registry
 		}
-	}
-
-	/// Retur reference to the registry for internal use.
-	#[inline]
-	fn get_registry(&mut self) -> &mut RegionRegistry {
-		ops::ref_from_option_ptr(self.registry)
 	}
 }
 
@@ -72,10 +60,9 @@ impl MemorySource for DummyMMSource {
 		//register
 		let res;
 		let has_manager = !manager.is_none();
-		if !self.registry.is_none() && has_manager {
-			let registry = unsafe{&mut *self.registry.unwrap()};
+		if self.registry.is_some() && has_manager {
 			let pmanager = manager.unwrap();
-			res = registry.set_entry(ptr,total_size,pmanager);
+			res = self.registry.as_mut().unwrap().set_entry(ptr,total_size,pmanager);
 		} else {
 			let pmanager = manager.unwrap();
 			res = RegionSegment::new(ptr,total_size,Some(pmanager));
@@ -99,8 +86,7 @@ impl MemorySource for DummyMMSource {
 
 		//unregister
 		if self.registry.is_some() && old_segment.has_manager() {
-			let registry = unsafe{&mut *self.registry.unwrap()};
-			registry.remove_from_segment(old_segment.clone());
+			self.registry.as_mut().unwrap().remove_from_segment(old_segment.clone());
 		}
 
 		//remap
@@ -111,7 +97,7 @@ impl MemorySource for DummyMMSource {
 		let has_manager = manager.is_some();
 		let pmanager = manager.unwrap();
 		if self.registry.is_some() && has_manager {
-			res = self.get_registry().set_entry(ptr,total_size,pmanager);
+			res = self.registry.as_mut().unwrap().set_entry(ptr,total_size,pmanager);
 		} else {
 			res = RegionSegment::new(ptr,total_size,Some(pmanager));
 		}
@@ -126,7 +112,7 @@ impl MemorySource for DummyMMSource {
 			
 		//unregister
 		if self.registry.is_some() && segment.has_manager() {
-			self.get_registry().remove_from_segment(segment.clone());
+			self.registry.as_mut().unwrap().remove_from_segment(segment.clone());
 		}
 		
 		//unmap it
@@ -144,7 +130,7 @@ mod tests
 	fn test_full_workflow() {
 		let mut registry = RegionRegistry::new();
 		let mut manager = DummyChunkManager::new();
-		let mut mmsource = DummyMMSource::new(Some(&mut registry));
+		let mut mmsource = DummyMMSource::new(Some(SharedPtrBox::new_ref_mut(&mut registry)));
 
 		//map
 		let (seg1,zeroed) = mmsource.map(2*1024*1024,true,Some(ChunkManagerPtr::new_ref_mut(&mut manager)));

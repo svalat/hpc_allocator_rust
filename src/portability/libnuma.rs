@@ -12,15 +12,6 @@
 //import
 extern crate libc;
 
-//import
-use core::ops::{Drop, Deref, DerefMut};
-
-/// Define the libnuma bitmask
-pub struct bitmask {
-	size: libc::c_ulong,
-	maskp: * mut libc::c_ulong,
-}
-
 // requiered functions
 extern {
 	fn numa_num_task_nodes() -> libc::c_int;

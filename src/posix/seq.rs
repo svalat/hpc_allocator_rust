@@ -16,7 +16,7 @@ use mmsource::cached::CachedMMSource;
 use common::shared::SharedPtrBox;
 use common::types::{Addr,Size};
 use common::consts::*;
-use common::traits::{Allocator, ChunkManager};
+use common::traits::{ChunkManager};
 use core::mem;
 use portability::osmem;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -192,7 +192,7 @@ impl SeqAllocator {
 mod tests
 {
 	extern crate std;
-	use posix::uma::*;
+	use posix::seq::*;
 
 	// CAUTION HERE WE USE A GLOBAL ALLOCATOR SO TEST MUST BE WRITTEN
 	// TO BE REPRODUCIBLE AND NOT INTERFER TOGETHER

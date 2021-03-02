@@ -61,11 +61,13 @@ impl LocalAllocator {
 		}
 	}
 
-	fn post_init(&mut self) {
-		//nothing currently
+	pub fn post_init(&mut self, parent_chunk_manager: ChunkManagerPtr) {
+		self.huge.set_parent_chunk_manager(Some(parent_chunk_manager.clone()));
+		self.medium.set_parent_chunk_manager(Some(parent_chunk_manager.clone()));
+		self.small.set_parent_chunk_manager(Some(parent_chunk_manager.clone()));
 	}
 
-	fn malloc(&mut self,mut size: Size,align: Size,zero_filled: bool) -> Addr {
+	pub fn malloc(&mut self,mut size: Size,align: Size,zero_filled: bool) -> Addr {
 		//errors
 		debug_assert!(self.is_init);
 
@@ -80,7 +82,7 @@ impl LocalAllocator {
 		return self.internal_malloc(size,align,zero_filled);
 	}
 
-	fn free(&mut self,addr: Addr) {
+	pub fn free(&mut self,addr: Addr) {
 		//errors
 		debug_assert!(self.is_init);
 		
@@ -108,7 +110,7 @@ impl LocalAllocator {
 		return self.internal_malloc(size*nmemb,BASIC_ALIGN,true);
 	}
 
-	fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
+	pub fn realloc(&mut self,ptr: Addr,size:Size) -> Addr {
 		//errors
 		debug_assert!(self.is_init);
 		
