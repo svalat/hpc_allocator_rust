@@ -11,7 +11,7 @@ using namespace allocbench;
 using namespace std;
 
 /****************************************************/
-static const char * cstBenchModes[] = {"fixed", "list", "rand"};
+static const char * cstBenchModes[] = {"fixed", "list", "rand", "trace"};
 static const char * cstReuseModes[] = {"linear", "full", "rand"};
 
 /****************************************************/
@@ -20,7 +20,7 @@ const char *argp_program_bug_address = "<sebastien.valat-dev@orange.fr>";
 static char doc[] = "A simple memory allocator benchmark.";
 static char args_doc[] = "";
 static struct argp_option options[] = {
-	{"bench",      'b', "MODE",       0, "Benchmark running mode: 'fixed', 'list', 'rand'." },
+	{"bench",      'b', "MODE",       0, "Benchmark running mode: 'fixed', 'list', 'rand', 'trace'." },
 	{"reuse",      'r', "MODE",       0, "Slot reuse: 'linear', 'full', 'rand'."},
 	{"size",       's', "SIZE",       0, "Size to be used. In fix mode only one value, in list mode a comma separated list and in rand mode a min, step, max comma separated list."},
 	{"keep",       'k', "KEEP",       0, "Number of allocation to keep alive at the same time."},
@@ -30,6 +30,7 @@ static struct argp_option options[] = {
 	{"quiet",      'q', 0,            0, "Do not print the benchmark header with system info."},
 	{"progress",   'p', 0,            0, "Display a progress bar."},
 	{"cache",      'c', "SIZE",       0, "Maximal cache size in GB (floating point)."},
+	{"trace",      't', "FILE",       0, "Trace file to be used when bench mode is 'trace'."},
 	{ 0 }
 };
 
@@ -91,6 +92,7 @@ void Config::print(void)
 	for (auto & it: this->sizes)
 		cout << it << ", ";
 	cout << endl;
+	cout << "# Trace: " << this->trace << endl;
 	cout << "# Keep: " << this->keep << endl;
 	cout << "# Iterations: " << this->iterations << endl;
 	cout << "# Memset: " << (this->memset?"true":"false") << endl;
@@ -109,6 +111,8 @@ BenchMode getBenchMode(const std::string & value)
 		return BENCH_LIST;
 	else if (value == "rand")
 		return BENCH_RAND;
+	else if (value == "trace")
+		return BENCH_TRACE;
 	else
 		assert(false);
 }
@@ -186,6 +190,9 @@ static error_t parseOptions (int key, char *arg, struct argp_state *state)
 			break;
 		case 'c':
 			config->opCache = atof(arg);
+			break;
+		case 't':
+			config->trace = arg;
 			break;
 		case ARGP_KEY_ARG:
 			argp_usage (state);

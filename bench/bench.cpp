@@ -5,11 +5,18 @@
 #include <cstdlib>
 #include <cassert>
 #include <cstring>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include "Config.hpp"
 #include "ProgressBar.hpp"
 #include "PerfTracker.hpp"
+#include "from-mpc-allocator-cpp/AllocTraceStruct.h"
 
 /****************************************************/
+using namespace MPCAllocator;
 using namespace allocbench;
 using namespace std;
 
@@ -73,6 +80,9 @@ SizeGenerator::SizeGenerator(const Config & config)
 			this->randCntSteps = (this->randMax - this->randMin) / this->randStep;
 			this->randDistr = new uniform_int_distribution<size_t>(0, this->randCntSteps);
 			break;
+		case BENCH_TRACE:
+			assert(false);
+			break;
 	}
 }
 
@@ -101,6 +111,9 @@ size_t SizeGenerator::getSize(void)
 		case BENCH_RAND:
 			id = (*this->randDistr)(this->randGenerator);
 			size = this->randMin + this->randStep * id;
+			break;
+		case BENCH_TRACE:
+			assert(false);
 			break;
 	}
 
@@ -308,6 +321,89 @@ void benchRand(PerfTracker & perf, const Config & config)
 }
 
 /****************************************************/
+long getFileSize(std::string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+/****************************************************/
+void benchTrace(PerfTracker & perf, const Config & config)
+{
+	//vars
+	ticks before, after, cost;
+	ProgressBar progressBar(60, config.iterations, config.progress);
+
+	//get file size & rount to multiple of 4K
+	size_t traceSize = getFileSize(config.trace);
+	size_t traceEntries = traceSize / sizeof(TraceEntry);
+	assert(traceSize >= 0);
+	if (traceSize % 4096 != 0)
+		traceSize += 4096 - traceSize % traceSize;
+
+	//mmap to memory
+	int fd = open(config.trace.c_str(), 0);
+	assert(fd > 0);
+	void * tracePtr = mmap(NULL, traceSize, PROT_READ|PROT_WRITE, MAP_FILE|MAP_PRIVATE, fd, 0);
+	assert(tracePtr != MAP_FAILED);
+	TraceEntry * trace = static_cast<TraceEntry*>(tracePtr);
+
+	//start bench
+	perf.start();
+
+	//loop
+	for (size_t i = 0 ; i < config.iterations ; i++) {
+		//get storage id
+		size_t id = i % traceEntries;
+
+		//progress
+		progressBar.progress(i);
+
+		//treat entry
+		TraceEntry & entry = trace[id];
+
+		//case
+		if (entry.type == TRACE_MALLOC) {
+			//alloc
+			void * ptr = NULL;
+			size_t size = entry.size;
+			MEASURE(ptr = malloc(size));
+			ticks mallocCost = cost;
+
+			//memset
+			ticks memsetCost = 0;
+			if (config.memset) {
+				MEASURE(memset(ptr, 0, size));
+				memsetCost = cost;
+				perf.onMemset(ptr, size, cost);
+			}
+
+			//round
+			size_t power = log2(size);
+			size = 1<<power;
+
+			//push
+			perf.onMalloc(ptr, size, mallocCost, memsetCost);
+
+			//store
+			entry.ptrInfo.ptr = ptr;
+		} else if (entry.type == TRACE_FREE) {
+			TraceEntry & allocEntry = trace[entry.ptrInfo.ptrIndex];
+			if (allocEntry.type == TRACE_MALLOC) {
+				void * ptr = allocEntry.ptrInfo.ptr;
+				MEASURE(free(ptr));
+				perf.onFree(ptr, cost);
+				allocEntry.ptrInfo.ptr = nullptr;
+			}
+		}
+	}
+
+	//stop bench
+	perf.stop();
+}
+
+/****************************************************/
 int main(int argc, char ** argv)
 {
 	//parse args
@@ -331,6 +427,8 @@ int main(int argc, char ** argv)
 			assert(config.sizes[1] <= config.sizes[2] - config.sizes[1]);
 			assert(config.sizes[0] < config.sizes[2]);
 			break;
+		case BENCH_TRACE:
+			break;
 	}
 
 	//max store
@@ -341,16 +439,20 @@ int main(int argc, char ** argv)
 
 	//run
 	PerfTracker perf(opStore, config.perf);
-	switch(config.reuse) {
-		case REUSE_LINEAR:
-			benchLinear(perf, config);
-			break;
-		case REUSE_FULL:
-			benchFull(perf, config);
-			break;
-		case REUSE_RAND:
-			benchRand(perf, config);
-			break;
+	if (config.bench == BENCH_TRACE) {
+		benchTrace(perf, config);
+	} else {
+		switch(config.reuse) {
+			case REUSE_LINEAR:
+				benchLinear(perf, config);
+				break;
+			case REUSE_FULL:
+				benchFull(perf, config);
+				break;
+			case REUSE_RAND:
+				benchRand(perf, config);
+				break;
+		}
 	}
 
 	//print

@@ -16,6 +16,7 @@ enum BenchMode
 	BENCH_FIXED,
 	BENCH_LIST,
 	BENCH_RAND,
+	BENCH_TRACE,
 };
 
 /****************************************************/
@@ -38,6 +39,7 @@ struct Config
 	BenchMode bench;
 	ReuseMode reuse;
 	std::vector<size_t> sizes;
+	std::string trace;
 	size_t keep;
 	size_t iterations;
 	float opCache;

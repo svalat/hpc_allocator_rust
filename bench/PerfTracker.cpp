@@ -198,10 +198,11 @@ double PerfResults::push(PerfEvent * events, size_t count)
 			sizeMap[event.ptr] = &event;
 		} else if (event.type == EVENT_FREE) {
 			auto it = sizeMap.find(event.ptr);
-			assert(it != sizeMap.end());
-			perfMapFree[it->second->size].push(event.cost);
-			perfMapFullOps[it->second->size].push(event.cost + it->second->cost + it->second->memsetCost);
-			sizeMap.erase(it);
+			if(it != sizeMap.end()) {
+				perfMapFree[it->second->size].push(event.cost);
+				perfMapFullOps[it->second->size].push(event.cost + it->second->cost + it->second->memsetCost);
+				sizeMap.erase(it);
+			}
 		} else if (event.type == EVENT_MEMSET) {
 			perfMapMemset[event.size].push(event.cost);
 		} else {
