@@ -233,7 +233,7 @@ mod tests
 		let ptr2 = allocator.malloc(64);
 		assert_ne!(ptr1, ptr2);
 		let ptr3 = allocator.realloc(ptr1, 64);
-		assert_ne!(ptr1, ptr3);
+		assert_eq!(ptr1, ptr3);
 		allocator.free(ptr2);
 		allocator.free(ptr3);
 	}

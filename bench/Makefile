@@ -1,7 +1,9 @@
 # basic system setpu
 CXX=g++
 CFLAGS=-g -Wall
-CXXFLAGS=$(CFLAGS) -O2 --std=c++11
+CXXFLAGS=$(CFLAGS) -O1 --std=c++11
+LDFLAGS=
+LDFLAGS=-Lallocs/ -lhpc_allocator_rust -Wl,-rpath,$$PWD/allocs
 
 # default target
 all: bench libtracer.so
@@ -12,7 +14,7 @@ libtracer.so: tracer.cpp from-mpc-allocator-cpp/PosixAllocatorStd.cpp from-mpc-a
 
 # build
 bench: PerfTracker.cpp ProgressBar.cpp Config.cpp bench.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 # header deps
 Config.cpp: Config.hpp

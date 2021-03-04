@@ -102,7 +102,7 @@ impl SmallChunkManager {
 			}
 
 			if res == NULL {
-				let run = handler.upate_active_run_for_size(size_class,ChunkManagerPtr::new_ref(self));
+				let run = handler.update_active_run_for_size(size_class,ChunkManagerPtr::new_ref(self));
 				match run {
 					Some(mut run) => res = run.malloc(size,align,zero_filled).0,
 					None => {},
@@ -381,7 +381,7 @@ impl SmallChunkManagerLocked {
 	}
 
 	/// Update the active run to get a fresh one with available free chunks.
-	fn upate_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
+	fn update_active_run_for_size(&mut self, size_class: usize, manager:ChunkManagerPtr) -> Option<SmallChunkRunPtr> {
 		//errors
 		debug_assert!(size_class < NB_SIZE_CLASS);
 		match self.active_runs[size_class] {
@@ -549,7 +549,7 @@ mod tests
 			}
 		}
 		
-		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-10);
+		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-11);
 
 		osmem::munmap(mem, SMALL_PAGE_SIZE);
 	}
@@ -570,7 +570,7 @@ mod tests
 			}
 		}
 		
-		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-10) + 5);
+		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-11) + 5);
 
 		osmem::munmap(mem, 2*SMALL_PAGE_SIZE);
 	}
@@ -592,7 +592,7 @@ mod tests
 			}
 		}
 		
-		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-12);
+		assert_eq!(cnt, SMALL_PAGE_SIZE / 16-13);
 
 		osmem::munmap(mem, SMALL_PAGE_SIZE);
 	}
@@ -681,7 +681,7 @@ mod tests
 			}
 		}
 		
-		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-10) + 5);
+		assert_eq!(cnt, 2*(SMALL_PAGE_SIZE / 16-11) + 5);
 
 		for i in 0..2*(SMALL_PAGE_SIZE / 16-10 + 5) {
 			manager.free(ptrs[i]);

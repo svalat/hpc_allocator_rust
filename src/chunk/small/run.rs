@@ -30,7 +30,7 @@ type MacroEntryPtr = SharedPtrBox<MacroEntry>;
 pub const SMALL_RUN_SIZE: usize = 4096;
 const MACRO_ENTRY_SIZE: usize = mem::size_of::<MacroEntry>();
 const MACRO_ENTRY_BITS: usize = 8 * MACRO_ENTRY_SIZE;
-const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 6;
+const STORAGE_ENTRIES: usize = SMALL_RUN_SIZE /  MACRO_ENTRY_SIZE - 7;
 const STORAGE_SIZE: usize = STORAGE_ENTRIES * MACRO_ENTRY_SIZE;
 
 /// define a run
@@ -46,6 +46,7 @@ pub struct SmallChunkRun {
 	skiped_size: SmallSize,
 	splitting: SmallSize,
 	bitmap_entries: SmallSize,
+	max_cnt_alloc: SmallSize,
 }
 
 /// Used to point
@@ -63,6 +64,7 @@ impl SmallChunkRun {
 		let mut cur = SmallChunkRunPtr::new_addr(addr);
 
 		cur.cnt_alloc = 0;
+		cur.max_cnt_alloc = 0;
 		cur.skiped_size = (ops::up_to_power_of_2(skiped_size as usize, MACRO_ENTRY_SIZE as usize) / MACRO_ENTRY_SIZE as usize) as u16;
 		cur.splitting = splitting;
 		cur.bitmap_entries = 0;
@@ -73,6 +75,18 @@ impl SmallChunkRun {
 		}
 
 		cur
+	}
+
+	/// This is more a validation function to check we correctly calculate the
+	/// number of chunks we can allocate in the run.
+	pub fn count_avail_chunks(&self) -> u16 {
+		let mut cnt: u16 = 0;
+		for i in 0..self.bitmap_entries {
+			if self.get_bit_status(i) {
+				cnt+=1;
+			}
+		}
+		return cnt;
 	}
 
 	/// Configure the splitting size, this can only be done if the run is empty.
@@ -109,19 +123,25 @@ impl SmallChunkRun {
 		assert!(self.bitmap_entries > bitmap_hidden_entries + skiped_entries);
 		
 		//clear bitmap with 1 (all free)
+		self.max_cnt_alloc = self.bitmap_entries;
 		for i in 0..(bitmap_size / MACRO_ENTRY_SIZE as u16) {
 			self.set_macro_entry(i as u16,MacroEntry::max_value());
 		}
 		
 		//mark skiped entries and bitmap part
+		self.max_cnt_alloc -= skiped_entries + bitmap_hidden_entries;
 		for i in 0..(skiped_entries + bitmap_hidden_entries) {
 			self.set_bit_status_zero(i);
 		}
 
 		//mark last bits to 0
+		self.max_cnt_alloc -= self.bitmap_entries as u16 - bitmap_real_entries as u16;
 		for i in bitmap_real_entries as u16..self.bitmap_entries as u16 {
 			self.set_bit_status_zero(i);
 		}
+
+		//check
+		assert_eq!(self.max_cnt_alloc, self.count_avail_chunks());
 	}
 
 	/// Check if the run is empty and contain no allocated segments.
@@ -130,7 +150,7 @@ impl SmallChunkRun {
 	}
 
 	/// Check if the run is full and cannot allocate more segements.
-	pub fn is_full(&self) -> bool {
+	pub fn is_full_slow(&self) -> bool {
 		debug_assert!(self.splitting > 0);
 		let macro_entries = self.bitmap_entries / MACRO_ENTRY_BITS as u16;
 		for i in 0..macro_entries {
@@ -139,6 +159,14 @@ impl SmallChunkRun {
 			}
 		}
 		return true;
+	}
+
+	/// Check if the run is full and cannot allocate more segements.
+	pub fn is_full(&self) -> bool {
+		debug_assert!(self.splitting > 0);
+		let res = self.cnt_alloc == self.max_cnt_alloc;
+		debug_assert_eq!(res, self.is_full_slow());
+		return res;
 	}
 
 	/// Allocate a new segement for the given size which must be smaller or equal
@@ -446,7 +474,7 @@ mod tests
 		
 		let mut cnt = 0;
 		while run.malloc(16,16,false).0 != NULL {cnt += 1;};
-		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
+		assert_eq!(SMALL_RUN_SIZE/16 - 6,cnt);
 
 		osmem::munmap(ptr, 4096);
 	}
@@ -468,7 +496,7 @@ mod tests
 				cnt += 1;
 			}
 		};
-		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
+		assert_eq!(SMALL_RUN_SIZE/16 - 6,cnt);
 
 		for i in 0..cnt {
 			for j in 0..i {
@@ -496,7 +524,7 @@ mod tests
 				cnt += 1;
 			}
 		};
-		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
+		assert_eq!(SMALL_RUN_SIZE/16 - 6,cnt);
 
 		run.free(store[32]);
 
@@ -530,7 +558,7 @@ mod tests
 
 		let mut cnt = 0;
 		while run.malloc(16,16,false).0 != NULL {cnt += 1;};
-		assert_eq!(SMALL_RUN_SIZE/16 - 5,cnt);
+		assert_eq!(SMALL_RUN_SIZE/16 - 6,cnt);
 
 		assert_eq!(run.is_full(), true);
 
@@ -553,7 +581,7 @@ mod tests
 				cnt += 1;
 			}
 		} 
-		assert_eq!(SMALL_RUN_SIZE/16 - 5 - 2,cnt);
+		assert_eq!(SMALL_RUN_SIZE/16 - 6 - 2,cnt);
 
 		osmem::munmap(ptr, 4096);
 	}

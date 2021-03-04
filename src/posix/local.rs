@@ -260,6 +260,7 @@ impl LocalAllocator {
 
 		//if need reset
 		if ptr != 0 && zero && ! zeroed {
+			assert!(false);
 			libc::memset(ptr, 0, fsize);
 		}
 

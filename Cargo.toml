@@ -13,9 +13,9 @@ crate-type = ["staticlib", "cdylib"]
 libc = {version = "0.2", default-features = false}
 
 [profile.release]
-opt-level = 3
-debug = false
-lto = true
+opt-level = 1
+debug = true
+lto = false
 debug-assertions = false
 
 [profile.bench]

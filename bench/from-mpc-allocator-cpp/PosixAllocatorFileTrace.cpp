@@ -218,8 +218,8 @@ int PosixAllocatorFileTrace::posix_memalign ( void** memptr, size_t alignment, s
 void* PosixAllocatorFileTrace::realloc ( void* old_ptr, size_t size )
 {
 	void * new_ptr = allocator->realloc(old_ptr, size);
-	onMalloc(new_ptr, size);
 	onFree(old_ptr);
+	onMalloc(new_ptr, size);
 	return new_ptr;
 }
 
