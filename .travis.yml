@@ -16,6 +16,7 @@ addons:
       - libdw-dev
       - binutils-dev
       - cmake # also required for cargo-update
+      - libnuma-dev
     sources:
       - kalakris-cmake
 
